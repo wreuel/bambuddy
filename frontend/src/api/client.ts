@@ -151,6 +151,7 @@ export interface AppSettings {
   default_filament_cost: number;
   currency: string;
   energy_cost_per_kwh: number;
+  energy_tracking_mode: 'print' | 'total';
 }
 
 export type AppSettingsUpdate = Partial<AppSettings>;

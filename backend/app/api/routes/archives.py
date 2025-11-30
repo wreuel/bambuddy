@@ -209,16 +209,39 @@ async def get_archive_stats(db: AsyncSession = Depends(get_db)):
         for printer_key, accs in printer_accuracies.items():
             accuracy_by_printer[printer_key] = round(sum(accs) / len(accs), 1)
 
-    # Energy totals
-    energy_kwh_result = await db.execute(
-        select(func.sum(PrintArchive.energy_kwh))
-    )
-    total_energy_kwh = energy_kwh_result.scalar() or 0
+    # Energy totals - check which mode to use
+    from backend.app.api.routes.settings import get_setting
+    energy_tracking_mode = await get_setting(db, "energy_tracking_mode") or "total"
+    energy_cost_per_kwh_str = await get_setting(db, "energy_cost_per_kwh")
+    energy_cost_per_kwh = float(energy_cost_per_kwh_str) if energy_cost_per_kwh_str else 0.15
 
-    energy_cost_result = await db.execute(
-        select(func.sum(PrintArchive.energy_cost))
-    )
-    total_energy_cost = energy_cost_result.scalar() or 0
+    if energy_tracking_mode == "total":
+        # Total mode: sum up 'total' counter from all smart plugs (lifetime consumption)
+        from backend.app.models.smart_plug import SmartPlug
+        from backend.app.services.tasmota import tasmota_service
+
+        plugs_result = await db.execute(select(SmartPlug))
+        plugs = list(plugs_result.scalars().all())
+
+        total_energy_kwh = 0.0
+        for plug in plugs:
+            energy = await tasmota_service.get_energy(plug)
+            if energy and energy.get("total") is not None:
+                total_energy_kwh += energy["total"]
+
+        total_energy_kwh = round(total_energy_kwh, 3)
+        total_energy_cost = round(total_energy_kwh * energy_cost_per_kwh, 2)
+    else:
+        # Print mode: sum up per-print energy from archives
+        energy_kwh_result = await db.execute(
+            select(func.sum(PrintArchive.energy_kwh))
+        )
+        total_energy_kwh = energy_kwh_result.scalar() or 0
+
+        energy_cost_result = await db.execute(
+            select(func.sum(PrintArchive.energy_cost))
+        )
+        total_energy_cost = energy_cost_result.scalar() or 0
 
     return ArchiveStats(
         total_prints=total_prints,

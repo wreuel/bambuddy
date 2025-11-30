@@ -555,49 +555,56 @@ async def on_print_complete(printer_id: int, data: dict):
             "status": status,
         })
 
-    # Calculate energy used for this print
+    # Calculate energy used for this print (always per-print: end - start)
     try:
         starting_kwh = _print_energy_start.pop(archive_id, None)
-        logger.info(f"[ENERGY] Print complete for archive {archive_id}, starting_kwh={starting_kwh}, tracked_archives={list(_print_energy_start.keys())}")
-        if starting_kwh is not None:
-            async with async_session() as db:
-                # Get smart plug for this printer (SmartPlug is imported at module level)
-                plug_result = await db.execute(
-                    select(SmartPlug).where(SmartPlug.printer_id == printer_id)
-                )
-                plug = plug_result.scalar_one_or_none()
+        logger.info(f"[ENERGY] Print complete for archive {archive_id}, starting_kwh={starting_kwh}")
 
-                if plug:
-                    energy = await tasmota_service.get_energy(plug)
-                    logger.info(f"[ENERGY] Print complete - ending energy response: {energy}")
-                    if energy and energy.get("total") is not None:
-                        ending_kwh = energy["total"]
-                        energy_used = round(ending_kwh - starting_kwh, 4)
-                        logger.info(f"[ENERGY] Calculated: ending={ending_kwh}, starting={starting_kwh}, used={energy_used}")
+        async with async_session() as db:
+            # Get smart plug for this printer (SmartPlug is imported at module level)
+            plug_result = await db.execute(
+                select(SmartPlug).where(SmartPlug.printer_id == printer_id)
+            )
+            plug = plug_result.scalar_one_or_none()
 
-                        # Get energy cost per kWh from settings (default to 0.15)
-                        from backend.app.api.routes.settings import get_setting
-                        energy_cost_per_kwh = await get_setting(db, "energy_cost_per_kwh")
-                        cost_per_kwh = float(energy_cost_per_kwh) if energy_cost_per_kwh else 0.15
-                        energy_cost = round(energy_used * cost_per_kwh, 2)
+            if plug:
+                energy = await tasmota_service.get_energy(plug)
+                logger.info(f"[ENERGY] Print complete - energy response: {energy}")
 
-                        # Update archive with energy data
-                        from backend.app.models.archive import PrintArchive
-                        result = await db.execute(
-                            select(PrintArchive).where(PrintArchive.id == archive_id)
-                        )
-                        archive = result.scalar_one_or_none()
-                        if archive:
-                            archive.energy_kwh = energy_used
-                            archive.energy_cost = energy_cost
-                            await db.commit()
-                            logger.info(f"[ENERGY] Saved to archive {archive_id}: {energy_used} kWh, cost={energy_cost}")
-                        else:
-                            logger.warning(f"[ENERGY] Archive {archive_id} not found when saving energy")
-                    else:
-                        logger.warning(f"[ENERGY] No 'total' in ending energy response")
+                energy_used = None
+
+                # Calculate per-print energy: end total - start total
+                if starting_kwh is not None and energy and energy.get("total") is not None:
+                    ending_kwh = energy["total"]
+                    energy_used = round(ending_kwh - starting_kwh, 4)
+                    logger.info(f"[ENERGY] Per-print energy: ending={ending_kwh}, starting={starting_kwh}, used={energy_used}")
+                elif starting_kwh is None:
+                    logger.info(f"[ENERGY] No starting energy recorded for this archive")
                 else:
-                    logger.info(f"[ENERGY] No smart plug found for printer {printer_id} at print complete")
+                    logger.warning(f"[ENERGY] No 'total' in ending energy response")
+
+                if energy_used is not None and energy_used >= 0:
+                    # Get energy cost per kWh from settings (default to 0.15)
+                    from backend.app.api.routes.settings import get_setting
+                    energy_cost_per_kwh = await get_setting(db, "energy_cost_per_kwh")
+                    cost_per_kwh = float(energy_cost_per_kwh) if energy_cost_per_kwh else 0.15
+                    energy_cost = round(energy_used * cost_per_kwh, 2)
+
+                    # Update archive with energy data
+                    from backend.app.models.archive import PrintArchive
+                    result = await db.execute(
+                        select(PrintArchive).where(PrintArchive.id == archive_id)
+                    )
+                    archive = result.scalar_one_or_none()
+                    if archive:
+                        archive.energy_kwh = energy_used
+                        archive.energy_cost = energy_cost
+                        await db.commit()
+                        logger.info(f"[ENERGY] Saved to archive {archive_id}: {energy_used} kWh, cost={energy_cost}")
+                    else:
+                        logger.warning(f"[ENERGY] Archive {archive_id} not found when saving energy")
+            else:
+                logger.info(f"[ENERGY] No smart plug found for printer {printer_id} at print complete")
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Failed to calculate energy: {e}")

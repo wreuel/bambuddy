@@ -59,7 +59,8 @@ export function SettingsPage() {
         settings.capture_finish_photo !== localSettings.capture_finish_photo ||
         settings.default_filament_cost !== localSettings.default_filament_cost ||
         settings.currency !== localSettings.currency ||
-        settings.energy_cost_per_kwh !== localSettings.energy_cost_per_kwh;
+        settings.energy_cost_per_kwh !== localSettings.energy_cost_per_kwh ||
+        settings.energy_tracking_mode !== localSettings.energy_tracking_mode;
       setHasChanges(changed);
     }
   }, [settings, localSettings]);
@@ -72,6 +73,8 @@ export function SettingsPage() {
       setHasChanges(false);
       setShowSaved(true);
       setTimeout(() => setShowSaved(false), 2000);
+      // Invalidate archive stats to reflect energy tracking mode change
+      queryClient.invalidateQueries({ queryKey: ['archiveStats'] });
     },
   });
 
@@ -249,8 +252,23 @@ export function SettingsPage() {
                   }
                   className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
                 />
+              </div>
+              <div>
+                <label className="block text-sm text-bambu-gray mb-1">
+                  Energy display mode
+                </label>
+                <select
+                  value={localSettings.energy_tracking_mode || 'total'}
+                  onChange={(e) => updateSetting('energy_tracking_mode', e.target.value as 'print' | 'total')}
+                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                >
+                  <option value="print">Prints Only</option>
+                  <option value="total">Total Consumption</option>
+                </select>
                 <p className="text-xs text-bambu-gray mt-1">
-                  Used for tracking energy costs per print via smart plugs
+                  {localSettings.energy_tracking_mode === 'print'
+                    ? 'Dashboard shows sum of energy used during prints'
+                    : 'Dashboard shows lifetime energy from smart plugs'}
                 </p>
               </div>
             </CardContent>
