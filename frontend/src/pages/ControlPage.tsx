@@ -5,14 +5,12 @@ import { api } from '../api/client';
 import type { PrinterStatus } from '../api/client';
 import { CameraFeed } from '../components/control/CameraFeed';
 import { PrintStatus } from '../components/control/PrintStatus';
-import { PrintControls } from '../components/control/PrintControls';
-import { TemperaturePanel } from '../components/control/TemperaturePanel';
-import { SpeedControl } from '../components/control/SpeedControl';
-import { FanControls } from '../components/control/FanControls';
-import { LightToggle } from '../components/control/LightToggle';
-import { MovementControls } from '../components/control/MovementControls';
-import { AMSPanel } from '../components/control/AMSPanel';
-import { Loader2, WifiOff } from 'lucide-react';
+import { TemperatureColumn } from '../components/control/TemperatureColumn';
+import { JogPad } from '../components/control/JogPad';
+import { BedControls } from '../components/control/BedControls';
+import { ExtruderControls } from '../components/control/ExtruderControls';
+import { AMSSectionDual } from '../components/control/AMSSectionDual';
+import { Loader2, WifiOff, Video, Webcam, HardDrive, Settings } from 'lucide-react';
 
 export function ControlPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -89,7 +87,7 @@ export function ControlPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col bg-bambu-dark">
       {/* Printer Tabs */}
       <div className="bg-bambu-dark-secondary border-b border-bambu-dark-tertiary">
         <div className="flex overflow-x-auto">
@@ -125,79 +123,115 @@ export function ControlPage() {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content - Bambu Studio Layout */}
       {selectedPrinter && (
-        <div className="flex-1 overflow-auto p-4">
-          <div className="max-w-7xl mx-auto">
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Panel - Camera & Print Progress */}
+          <div className="flex-1 flex flex-col bg-bambu-dark">
+            {/* Camera Header Icons - same height as Control header */}
+            <div className="flex items-center justify-end gap-2 px-3 py-2.5 bg-bambu-dark-secondary border-b border-bambu-dark-tertiary min-h-[44px]">
+              <button className="p-1.5 rounded hover:bg-bambu-dark-tertiary text-bambu-gray hover:text-white">
+                <HardDrive className="w-4 h-4" />
+              </button>
+              <button className="p-1.5 rounded hover:bg-bambu-dark-tertiary text-bambu-gray hover:text-white">
+                <Video className="w-4 h-4" />
+              </button>
+              <button className="p-1.5 rounded hover:bg-bambu-dark-tertiary text-bambu-gray hover:text-white">
+                <Webcam className="w-4 h-4" />
+              </button>
+              <button className="p-1.5 rounded hover:bg-bambu-dark-tertiary text-bambu-gray hover:text-white">
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Camera Feed - Embedded directly */}
+            <div className="flex-1 bg-black">
+              <CameraFeed
+                printerId={selectedPrinter.id}
+                isConnected={selectedStatus?.connected ?? false}
+              />
+            </div>
+
+            {/* Status Bar */}
+            <div className="h-1 bg-bambu-green" />
+
+            {/* Print Progress with integrated controls */}
+            <div className="bg-bambu-dark-secondary p-4 px-5">
+              <PrintStatus
+                printerId={selectedPrinter.id}
+                status={selectedStatus}
+              />
+            </div>
+          </div>
+
+          {/* Right Panel - Control */}
+          <div className="w-[620px] flex flex-col bg-bambu-dark-secondary border-l border-bambu-dark-tertiary overflow-y-auto">
+            {/* Control Header - same height as Camera header */}
+            <div className="flex items-center justify-between px-3 py-2.5 border-b border-bambu-dark-tertiary min-h-[44px]">
+              <span className="text-sm text-bambu-gray">Control</span>
+              <div className="flex gap-2">
+                <button className="px-4 py-1.5 text-xs rounded bg-bambu-green text-white hover:bg-bambu-green-dark">
+                  Printer Parts
+                </button>
+                <button className="px-4 py-1.5 text-xs rounded bg-bambu-green text-white hover:bg-bambu-green-dark">
+                  Print Options
+                </button>
+                <button className="px-4 py-1.5 text-xs rounded bg-bambu-green text-white hover:bg-bambu-green-dark">
+                  Calibration
+                </button>
+              </div>
+            </div>
+
             {/* Connection Warning */}
             {!selectedStatus?.connected && (
-              <div className="mb-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg flex items-center gap-3">
-                <WifiOff className="w-5 h-5 text-red-500" />
-                <span className="text-red-400">
+              <div className="m-3 p-3 bg-red-500/20 border border-red-500/50 rounded-lg flex items-center gap-3">
+                <WifiOff className="w-4 h-4 text-red-500" />
+                <span className="text-sm text-red-400">
                   Printer is not connected. Controls are disabled.
                 </span>
               </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Left Column: Camera + Print Status */}
-              <div className="space-y-4">
-                {/* Camera Feed */}
-                <CameraFeed
-                  printerId={selectedPrinter.id}
-                  isConnected={selectedStatus?.connected ?? false}
-                />
-
-                {/* Print Status & Controls */}
-                <PrintStatus
-                  printerId={selectedPrinter.id}
-                  status={selectedStatus}
-                />
-                <PrintControls
-                  printerId={selectedPrinter.id}
-                  status={selectedStatus}
-                />
-
-                {/* AMS Panel */}
-                <AMSPanel
-                  printerId={selectedPrinter.id}
-                  status={selectedStatus}
-                />
-              </div>
-
-              {/* Right Column: Controls */}
-              <div className="space-y-4">
-                {/* Temperature Panel */}
-                <TemperaturePanel
+            {/* Control Body */}
+            <div className="flex-1 p-4 bg-bambu-dark">
+              {/* Top Section: Temp + Movement + Extruder */}
+              <div className="flex gap-6 mb-4" style={{ minHeight: '300px' }}>
+                {/* Temperature Column */}
+                <TemperatureColumn
                   printerId={selectedPrinter.id}
                   status={selectedStatus}
                   nozzleCount={selectedPrinter.nozzle_count}
                 />
 
-                {/* Speed Control */}
-                <SpeedControl
-                  printerId={selectedPrinter.id}
-                  status={selectedStatus}
-                />
+                {/* Movement Column */}
+                <div className="flex-1 flex gap-6 items-center justify-center">
+                  {/* Jog Section */}
+                  <div className="flex flex-col items-center">
+                    <JogPad
+                      printerId={selectedPrinter.id}
+                      status={selectedStatus}
+                    />
+                    <BedControls
+                      printerId={selectedPrinter.id}
+                      status={selectedStatus}
+                    />
+                  </div>
 
-                {/* Fan Controls */}
-                <FanControls
-                  printerId={selectedPrinter.id}
-                  status={selectedStatus}
-                />
-
-                {/* Light Toggle */}
-                <LightToggle
-                  printerId={selectedPrinter.id}
-                  status={selectedStatus}
-                />
-
-                {/* Movement Controls */}
-                <MovementControls
-                  printerId={selectedPrinter.id}
-                  status={selectedStatus}
-                />
+                  {/* Extruder Section */}
+                  <ExtruderControls
+                    printerId={selectedPrinter.id}
+                    status={selectedStatus}
+                    nozzleCount={selectedPrinter.nozzle_count}
+                  />
+                </div>
               </div>
+
+              {/* AMS Section */}
+              <AMSSectionDual
+                printerId={selectedPrinter.id}
+                status={selectedStatus}
+                nozzleCount={selectedPrinter.nozzle_count}
+              />
             </div>
           </div>
         </div>

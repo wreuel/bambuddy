@@ -66,7 +66,7 @@ export function PrintControls({ printerId, status }: PrintControlsProps) {
 
   return (
     <>
-      <div className="bg-bambu-dark-secondary rounded-lg p-4">
+      <div>
         <h3 className="text-sm font-medium text-bambu-gray mb-3">Print Controls</h3>
 
         <div className="flex gap-2">

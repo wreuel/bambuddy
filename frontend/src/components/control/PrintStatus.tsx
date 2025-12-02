@@ -1,90 +1,190 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import type { PrinterStatus } from '../../api/client';
-import { Clock, Layers, FileText } from 'lucide-react';
+import { api, isConfirmationRequired } from '../../api/client';
+import { Pause, Square, Loader2 } from 'lucide-react';
+import { ConfirmModal } from '../ConfirmModal';
 
 interface PrintStatusProps {
   printerId: number;
   status: PrinterStatus | null | undefined;
 }
 
-function formatTime(seconds: number | null | undefined): string {
-  if (!seconds) return '--:--';
-  const hours = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  if (hours > 0) {
-    return `${hours}h ${mins}m`;
-  }
-  return `${mins}m`;
+function formatFinishTime(seconds: number | null | undefined): string {
+  if (!seconds) return 'N/A';
+  const now = new Date();
+  const finish = new Date(now.getTime() + seconds * 1000);
+  return finish.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export function PrintStatus({ status }: PrintStatusProps) {
-  const isPrinting = status?.state === 'RUNNING' || status?.state === 'PAUSE';
+export function PrintStatus({ printerId, status }: PrintStatusProps) {
+  const queryClient = useQueryClient();
+  const [confirmModal, setConfirmModal] = useState<{
+    action: string;
+    token: string;
+    warning: string;
+  } | null>(null);
+
+  const isConnected = status?.connected ?? false;
+  const isPrinting = status?.state === 'RUNNING';
+  const isPaused = status?.state === 'PAUSE';
   const progress = status?.progress ?? 0;
 
+  const pauseMutation = useMutation({
+    mutationFn: () => api.pausePrint(printerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['printerStatuses'] });
+    },
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: () => api.resumePrint(printerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['printerStatuses'] });
+    },
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: (token?: string) => api.stopPrint(printerId, token),
+    onSuccess: (result) => {
+      if (isConfirmationRequired(result)) {
+        setConfirmModal({
+          action: 'stop',
+          token: result.token,
+          warning: result.warning,
+        });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['printerStatuses'] });
+      }
+    },
+  });
+
+  const handlePauseResume = () => {
+    if (isPrinting) {
+      pauseMutation.mutate();
+    } else if (isPaused) {
+      resumeMutation.mutate();
+    }
+  };
+
+  const handleStop = () => {
+    stopMutation.mutate(undefined);
+  };
+
+  const handleConfirmStop = () => {
+    if (confirmModal) {
+      stopMutation.mutate(confirmModal.token);
+      setConfirmModal(null);
+    }
+  };
+
+  const isLoading = pauseMutation.isPending || resumeMutation.isPending || stopMutation.isPending;
+  const canControl = isConnected && (isPrinting || isPaused);
+
   return (
-    <div className="bg-bambu-dark-secondary rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-bambu-gray">Print Status</h3>
-        <span
-          className={`px-2 py-0.5 rounded text-xs font-medium ${
-            status?.state === 'RUNNING'
-              ? 'bg-bambu-green/20 text-bambu-green'
-              : status?.state === 'PAUSE'
-              ? 'bg-yellow-500/20 text-yellow-500'
-              : status?.state === 'FINISH'
-              ? 'bg-blue-500/20 text-blue-500'
-              : status?.state === 'FAILED'
-              ? 'bg-red-500/20 text-red-500'
-              : 'bg-bambu-dark-tertiary text-bambu-gray'
-          }`}
-        >
-          {status?.state || 'IDLE'}
-        </span>
+    <>
+      <div className="text-xs text-bambu-gray mb-3">Printing Progress</div>
+      <div className="flex gap-4 items-center">
+        {/* Thumbnail */}
+        <div className="w-20 h-20 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+          {status?.subtask_name ? (
+            <img
+              src={`/api/v1/archives/thumbnail/${encodeURIComponent(status.subtask_name)}`}
+              alt=""
+              className="w-full h-full object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                (e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="text-xs text-bambu-gray">Bambu<br/>Lab</span>';
+              }}
+            />
+          ) : (
+            <span className="text-xs text-bambu-gray text-center">Bambu<br/>Lab</span>
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-sm text-white truncate mb-0.5">
+            {status?.subtask_name || 'N/A'}
+          </div>
+          <div className={`text-sm mb-2 ${
+            status?.state === 'RUNNING' || status?.state === 'PAUSE'
+              ? 'text-bambu-green'
+              : 'text-bambu-gray'
+          }`}>
+            {status?.state || 'N/A'}
+          </div>
+          {/* Progress Bar */}
+          <div className="h-1 bg-bambu-dark-tertiary rounded-full overflow-hidden mb-2">
+            <div
+              className={`h-full transition-all duration-300 ${
+                status?.state === 'PAUSE' ? 'bg-yellow-500' : 'bg-bambu-green'
+              }`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div className="text-xs text-bambu-gray mb-1">
+            Layer: {status?.layer_num ?? 'N/A'} / {status?.total_layers ?? 'N/A'} &nbsp;&nbsp; {Math.round(progress)}%
+          </div>
+          <div className="text-xs text-bambu-gray">
+            Estimated finish time: {formatFinishTime(status?.remaining_time)}
+          </div>
+        </div>
+
+        {/* Control Buttons */}
+        <div className="flex gap-1.5 flex-shrink-0">
+          <button
+            onClick={handlePauseResume}
+            disabled={!canControl || isLoading}
+            className="w-8 h-8 rounded-md border border-bambu-dark-tertiary bg-bambu-dark-secondary hover:bg-bambu-dark-tertiary flex items-center justify-center text-bambu-gray disabled:opacity-50 disabled:cursor-not-allowed"
+            title={isPrinting ? 'Pause' : 'Resume'}
+          >
+            {pauseMutation.isPending || resumeMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Pause className="w-4 h-4" />
+            )}
+          </button>
+          <button
+            onClick={handleStop}
+            disabled={!canControl || isLoading}
+            className="w-8 h-8 rounded-md border border-bambu-dark-tertiary bg-bambu-dark-secondary hover:bg-bambu-dark-tertiary flex items-center justify-center text-bambu-gray disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Stop"
+          >
+            {stopMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Square className="w-4 h-4" />
+            )}
+          </button>
+          <button
+            disabled={!canControl || isLoading}
+            className="w-8 h-8 rounded-md border border-bambu-dark-tertiary bg-bambu-dark-secondary hover:bg-bambu-dark-tertiary flex items-center justify-center text-bambu-gray disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Skip Objects"
+          >
+            <img src="/icons/skip-objects.svg" alt="Skip Objects" className="w-4 h-4 icon-theme" />
+          </button>
+        </div>
       </div>
 
-      {isPrinting && status?.subtask_name && (
-        <div className="flex items-center gap-2 mb-3 text-sm">
-          <FileText className="w-4 h-4 text-bambu-gray" />
-          <span className="truncate" title={status.subtask_name}>
-            {status.subtask_name}
-          </span>
-        </div>
+      {/* Error Message */}
+      {(pauseMutation.error || resumeMutation.error || stopMutation.error) && (
+        <p className="mt-2 text-xs text-red-500">
+          {(pauseMutation.error || resumeMutation.error || stopMutation.error)?.message}
+        </p>
       )}
 
-      {/* Progress Bar */}
-      <div className="mb-3">
-        <div className="flex justify-between text-xs text-bambu-gray mb-1">
-          <span>Progress</span>
-          <span>{Math.round(progress)}%</span>
-        </div>
-        <div className="h-2 bg-bambu-dark-tertiary rounded-full overflow-hidden">
-          <div
-            className={`h-full transition-all duration-300 ${
-              status?.state === 'PAUSE' ? 'bg-yellow-500' : 'bg-bambu-green'
-            }`}
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-bambu-gray" />
-          <div>
-            <div className="text-xs text-bambu-gray">Remaining</div>
-            <div className="font-medium">{formatTime(status?.remaining_time)}</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-bambu-gray" />
-          <div>
-            <div className="text-xs text-bambu-gray">Layer</div>
-            <div className="font-medium">
-              {status?.layer_num ?? 0} / {status?.total_layers ?? 0}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      {/* Confirmation Modal */}
+      {confirmModal && (
+        <ConfirmModal
+          title="Confirm Stop"
+          message={confirmModal.warning}
+          confirmText="Stop Print"
+          variant="danger"
+          onConfirm={handleConfirmStop}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
+    </>
   );
 }
