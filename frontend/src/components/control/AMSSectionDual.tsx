@@ -813,6 +813,10 @@ export function AMSSectionDual({ printerId, printerModel, status, nozzleCount }:
   // Track if we've done initial sync from tray_now
   const initialSyncDone = useRef(false);
 
+  // Track intended operation type synchronously (refs update immediately, unlike state)
+  // This prevents race conditions where MQTT updates arrive before React state updates
+  const intendedOperationRef = useRef<'load' | 'unload' | null>(null);
+
   // Sync selectedTray from status.tray_now on initial load
   // tray_now: 255 = no filament loaded, 0-253 = valid tray ID, 254 = external spool
   useEffect(() => {
@@ -920,6 +924,8 @@ export function AMSSectionDual({ printerId, printerModel, status, nozzleCount }:
     if (selectedTray !== null) {
       const extruderId = getExtruderIdForTray(selectedTray);
       console.log(`[AMSSectionDual] Calling loadMutation.mutate(tray: ${selectedTray}, extruder: ${extruderId})`);
+      // Set ref synchronously FIRST (refs update immediately, before MQTT can respond)
+      intendedOperationRef.current = 'load';
       // Show filament change card immediately
       setUserFilamentChange({ isLoading: true, targetTrayId: selectedTray });
       loadMutation.mutate({ trayId: selectedTray, extruderId });
@@ -927,14 +933,19 @@ export function AMSSectionDual({ printerId, printerModel, status, nozzleCount }:
   };
 
   const handleUnload = () => {
+    console.log(`[AMSSectionDual] handleUnload called, printerId: ${printerId}, trayNow: ${status?.tray_now}`);
+    // Set ref synchronously FIRST (refs update immediately, before MQTT can respond)
+    intendedOperationRef.current = 'unload';
     // Show filament change card immediately (no target tray for unload)
     setUserFilamentChange({ isLoading: false, targetTrayId: null });
+    console.log(`[AMSSectionDual] Calling unloadMutation.mutate()`);
     unloadMutation.mutate();
   };
 
   // Callback for FilamentChangeCard to close itself
   const handleFilamentChangeComplete = () => {
     console.log(`[AMSSectionDual] FilamentChangeCard completed, closing card`);
+    intendedOperationRef.current = null; // Clear the synchronous ref
     setUserFilamentChange(null);
   };
 
@@ -1005,8 +1016,9 @@ export function AMSSectionDual({ printerId, printerModel, status, nozzleCount }:
       setUserFilamentChange(null);
     } else if (wasActive && !isMqttFilamentChangeActive) {
       // Transition from active (1) to idle (0)
-      // Close the card by clearing user state
+      // Close the card by clearing user state and the synchronous ref
       console.log(`[AMSSectionDual] ams_status_main transitioned 1->0, closing card`);
+      intendedOperationRef.current = null;
       setUserFilamentChange(null);
     }
 
@@ -1017,16 +1029,21 @@ export function AMSSectionDual({ printerId, printerModel, status, nozzleCount }:
   // Show FilamentChangeCard when either MQTT reports active ams_status OR user just clicked load/unload
   const showFilamentChangeCard = isMqttFilamentChangeActive || userFilamentChange !== null;
 
-  // Determine if loading or unloading for the card display
-  // Use user intent if available, otherwise default to loading (most common operation)
-  const isFilamentLoading = userFilamentChange !== null
-    ? userFilamentChange.isLoading
-    : true; // Default to loading when detected via MQTT
-
   // Get the loaded tray info for wire coloring
   // Wire coloring should show the path from the currently loaded filament to the extruder
   // But ONLY if the currently displayed AMS panel is the one with the loaded filament
   const trayNow = status?.tray_now ?? 255;
+
+  // Determine if loading or unloading for the card display
+  // Priority: 1) Synchronous ref (set immediately on click), 2) React state, 3) MQTT signals
+  // The ref prevents race conditions where MQTT updates arrive before React state updates
+  const amsStatusSub = status?.ams_status_sub ?? 0;
+  const SUB_RETRACT = 4; // Only happens during unload
+  const isFilamentLoading =
+    intendedOperationRef.current === 'load' ? true :
+    intendedOperationRef.current === 'unload' ? false :
+    userFilamentChange !== null ? userFilamentChange.isLoading :
+    !(amsStatusSub === SUB_RETRACT || trayNow === 255); // Unload if retracting or tray_now is 255
   const getLoadedTrayInfo = (): {
     leftActiveSlot: number | null;
     rightActiveSlot: number | null;

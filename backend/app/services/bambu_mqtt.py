@@ -740,7 +740,48 @@ class BambuMQTTClient:
                     # Note: Do NOT clear pending_tray_target on tray_now=255 here.
                     # During filament change, the printer sends 255 first (unload), then the slot.
                     # We only clear pending_tray_target explicitly in ams_unload_filament().
-                    self.state.tray_now = parsed_tray_now
+
+                    # H2D special case: when tray_now=255 AND we're in active filament change,
+                    # check if any AMS has active info for disambiguation.
+                    # But when IDLE (ams_status_main=0), trust tray_now=255 - filament is unloaded.
+                    # The info field "1XXX" means actively feeding, "2XXX" means idle.
+                    if parsed_tray_now == 255 and self.state.ams_status_main == 1:
+                        # Only do info override during active filament change
+                        # Check if any AMS has info starting with "1" (active)
+                        inferred_from_info = None
+                        for ams_unit in ams_list:
+                            ams_id = ams_unit.get("id")
+                            if ams_id is None:
+                                continue
+                            try:
+                                ams_id = int(ams_id)
+                            except (ValueError, TypeError):
+                                continue
+
+                            info = ams_unit.get("info")
+                            if info is not None:
+                                info_str = str(info)
+                                if info_str.startswith("1") and len(info_str) >= 2:
+                                    # Info format: 1XYZ where X is the slot index
+                                    try:
+                                        slot_idx = int(info_str[1])
+                                        if 0 <= slot_idx <= 3:
+                                            inferred_from_info = ams_id * 4 + slot_idx
+                                            logger.info(
+                                                f"[{self.serial_number}] H2D tray_now override: "
+                                                f"printer reports 255 but AMS {ams_id} info={info_str} shows "
+                                                f"slot {slot_idx} is active -> using global ID {inferred_from_info}"
+                                            )
+                                            break
+                                    except (ValueError, IndexError):
+                                        pass
+
+                        if inferred_from_info is not None:
+                            self.state.tray_now = inferred_from_info
+                        else:
+                            self.state.tray_now = parsed_tray_now
+                    else:
+                        self.state.tray_now = parsed_tray_now
 
                 logger.debug(f"[{self.serial_number}] tray_now updated: {self.state.tray_now}")
 
@@ -2462,22 +2503,36 @@ class BambuMQTTClient:
             logger.warning(f"[{self.serial_number}] Cannot unload filament: not connected")
             return False
 
-        # Build unload command with all required fields (per HA-Bambulab integration)
+        # Get the currently loaded tray info
+        tray_now = self.state.tray_now
+        logger.info(f"[{self.serial_number}] Unload requested, tray_now={tray_now}")
+
+        # Determine the ams_id from tray_now (if valid tray is loaded)
+        # From BambuStudio source: unload requires target=255 AND slot_id=255
+        # plus the ams_id of the source AMS unit
+        if tray_now is not None and tray_now < 254:
+            ams_id = tray_now // 4
+        else:
+            ams_id = 0  # Default to AMS 0 if no tray loaded
+
+        # Build unload command using BambuStudio's "new protocol"
+        # Key: Both target=255 AND slot_id=255 are required for unload
         command = {
             "print": {
                 "command": "ams_change_filament",
-                "target": 255,  # 255 = unload
-                "ams_id": 255,
-                "slot_id": 0,
-                "curr_temp": 0,
-                "tar_temp": 0,
-                "sequence_id": "0"
+                "sequence_id": "0",
+                "target": 255,    # 255 = unload
+                "slot_id": 255,   # 255 = unload (new protocol)
+                "ams_id": ams_id,
+                "curr_temp": 220,
+                "tar_temp": 220
             }
         }
+
         command_json = json.dumps(command)
         logger.info(f"[{self.serial_number}] Publishing ams_change_filament (unload) command: {command_json}")
         self._client.publish(self.topic_publish, command_json)
-        logger.info(f"[{self.serial_number}] Unloading filament")
+        logger.info(f"[{self.serial_number}] Unloading filament from AMS {ams_id}")
 
         # Clear tracked load request since we're unloading
         self._last_load_tray_id = None
