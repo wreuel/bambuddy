@@ -1170,13 +1170,14 @@ export function AMSSectionDual({ printerId, printerModel, status, nozzleCount }:
         <div className="flex-1" />
 
         <div className="flex items-center gap-2">
+          {/* Unload button: disabled if not connected, printing, mutation pending, or no filament loaded */}
           <button
             onClick={handleUnload}
             disabled={!isConnected || isPrinting || isLoading || trayNow === 255}
             className={`px-7 py-2.5 rounded-lg text-sm transition-colors border ${
               !isConnected || isPrinting || isLoading || trayNow === 255
-                ? 'bg-white dark:bg-bambu-dark text-gray-400 dark:text-gray-500 border-gray-200 dark:border-bambu-dark-tertiary cursor-not-allowed'
-                : 'bg-bambu-green text-white border-bambu-green hover:bg-bambu-green-dark hover:border-bambu-green-dark'
+                ? 'bg-bambu-gray-dark text-gray-500 border-bambu-gray-dark cursor-not-allowed'
+                : 'bg-bambu-dark-secondary text-white border-bambu-dark-tertiary hover:bg-bambu-dark'
             }`}
           >
             {unloadMutation.isPending ? (
@@ -1185,13 +1186,14 @@ export function AMSSectionDual({ printerId, printerModel, status, nozzleCount }:
               'Unload'
             )}
           </button>
+          {/* Load button: disabled if not connected, printing, mutation pending, no tray selected, or selected tray is already loaded */}
           <button
             onClick={handleLoad}
-            disabled={!isConnected || isPrinting || selectedTray === null || isLoading}
+            disabled={!isConnected || isPrinting || selectedTray === null || isLoading || selectedTray === trayNow}
             className={`px-7 py-2.5 rounded-lg text-sm transition-colors border ${
-              !isConnected || isPrinting || selectedTray === null || isLoading
-                ? 'bg-white dark:bg-bambu-dark text-gray-400 dark:text-gray-500 border-gray-200 dark:border-bambu-dark-tertiary cursor-not-allowed'
-                : 'bg-bambu-green text-white border-bambu-green hover:bg-bambu-green-dark hover:border-bambu-green-dark'
+              !isConnected || isPrinting || selectedTray === null || isLoading || selectedTray === trayNow
+                ? 'bg-bambu-gray-dark text-gray-500 border-bambu-gray-dark cursor-not-allowed'
+                : 'bg-bambu-dark-secondary text-white border-bambu-dark-tertiary hover:bg-bambu-dark'
             }`}
           >
             {loadMutation.isPending ? (
