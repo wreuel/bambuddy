@@ -247,6 +247,11 @@ export interface AppSettings {
   energy_tracking_mode: 'print' | 'total';
   check_updates: boolean;
   notification_language: string;
+  // AMS threshold settings
+  ams_humidity_good: number;  // <= this is green
+  ams_humidity_fair: number;  // <= this is orange, > is red
+  ams_temp_good: number;      // <= this is green/blue
+  ams_temp_fair: number;      // <= this is orange, > is red
 }
 
 export type AppSettingsUpdate = Partial<AppSettings>;

@@ -336,6 +336,9 @@ def printer_state_to_dict(state: PrinterState, printer_id: int | None = None) ->
             "tag_uid": vt_tag_uid,
         }
 
+    # Get ams_extruder_map from raw_data (populated by MQTT handler from AMS info field)
+    ams_extruder_map = raw_data.get("ams_extruder_map", {})
+
     result = {
         "connected": state.connected,
         "state": state.state,
@@ -358,6 +361,8 @@ def printer_state_to_dict(state: PrinterState, printer_id: int | None = None) ->
         "ams_status_main": state.ams_status_main,
         "ams_status_sub": state.ams_status_sub,
         "tray_now": state.tray_now,
+        # Per-AMS extruder map: {ams_id: extruder_id} where 0=right, 1=left
+        "ams_extruder_map": ams_extruder_map,
         # WiFi signal strength
         "wifi_signal": state.wifi_signal,
     }

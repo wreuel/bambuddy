@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, Loader2, Check, Plus, Plug, AlertTriangle, RotateCcw, Bell, Download, RefreshCw, ExternalLink, Globe } from 'lucide-react';
+import { Save, Loader2, Check, Plus, Plug, AlertTriangle, RotateCcw, Bell, Download, RefreshCw, ExternalLink, Globe, Droplets, Thermometer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import type { AppSettings, SmartPlug, NotificationProvider, UpdateStatus } from '../api/client';
@@ -106,7 +106,11 @@ export function SettingsPage() {
         settings.energy_cost_per_kwh !== localSettings.energy_cost_per_kwh ||
         settings.energy_tracking_mode !== localSettings.energy_tracking_mode ||
         settings.check_updates !== localSettings.check_updates ||
-        settings.notification_language !== localSettings.notification_language;
+        settings.notification_language !== localSettings.notification_language ||
+        settings.ams_humidity_good !== localSettings.ams_humidity_good ||
+        settings.ams_humidity_fair !== localSettings.ams_humidity_fair ||
+        settings.ams_temp_good !== localSettings.ams_temp_good ||
+        settings.ams_temp_fair !== localSettings.ams_temp_fair;
       setHasChanges(changed);
     }
   }, [settings, localSettings]);
@@ -379,6 +383,109 @@ export function SettingsPage() {
                   <RotateCcw className="w-4 h-4" />
                   Reset
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-white">AMS Display Thresholds</h2>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-bambu-gray">
+                Configure color thresholds for AMS humidity and temperature indicators.
+              </p>
+
+              {/* Humidity Thresholds */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-white">
+                  <Droplets className="w-4 h-4 text-blue-400" />
+                  <span className="font-medium">Humidity</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-bambu-gray mb-1">
+                      Good (green) ≤
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={localSettings.ams_humidity_good ?? 40}
+                        onChange={(e) => updateSetting('ams_humidity_good', parseInt(e.target.value) || 40)}
+                        className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                      />
+                      <span className="text-bambu-gray">%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-bambu-gray mb-1">
+                      Fair (orange) ≤
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={localSettings.ams_humidity_fair ?? 60}
+                        onChange={(e) => updateSetting('ams_humidity_fair', parseInt(e.target.value) || 60)}
+                        className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                      />
+                      <span className="text-bambu-gray">%</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-bambu-gray">
+                  Above fair threshold shows as red (bad)
+                </p>
+              </div>
+
+              {/* Temperature Thresholds */}
+              <div className="space-y-3 pt-2 border-t border-bambu-dark-tertiary">
+                <div className="flex items-center gap-2 text-white">
+                  <Thermometer className="w-4 h-4 text-orange-400" />
+                  <span className="font-medium">Temperature</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-bambu-gray mb-1">
+                      Good (blue) ≤
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="60"
+                        value={localSettings.ams_temp_good ?? 28}
+                        onChange={(e) => updateSetting('ams_temp_good', parseFloat(e.target.value) || 28)}
+                        className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                      />
+                      <span className="text-bambu-gray">°C</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-bambu-gray mb-1">
+                      Fair (orange) ≤
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="60"
+                        value={localSettings.ams_temp_fair ?? 35}
+                        onChange={(e) => updateSetting('ams_temp_fair', parseFloat(e.target.value) || 35)}
+                        className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                      />
+                      <span className="text-bambu-gray">°C</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-bambu-gray">
+                  Above fair threshold shows as red (hot)
+                </p>
               </div>
             </CardContent>
           </Card>

@@ -83,23 +83,63 @@ function WaterDropFull({ className }: { className?: string }) {
   );
 }
 
+// Thermometer SVG - empty outline
+function ThermometerEmpty({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 12 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 0.5C4.6 0.5 3.5 1.6 3.5 3V12.1C2.6 12.8 2 13.9 2 15C2 17.2 3.8 19 6 19C8.2 19 10 17.2 10 15C10 13.9 9.4 12.8 8.5 12.1V3C8.5 1.6 7.4 0.5 6 0.5Z" stroke="#C3C2C1" strokeWidth="1" fill="none"/>
+      <circle cx="6" cy="15" r="2.5" stroke="#C3C2C1" strokeWidth="1" fill="none"/>
+    </svg>
+  );
+}
+
+// Thermometer SVG - half filled (gold - same as humidity fair)
+function ThermometerHalf({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 12 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4.5" y="8" width="3" height="4.5" fill="#d4a017" rx="0.5"/>
+      <circle cx="6" cy="15" r="2" fill="#d4a017"/>
+      <path d="M6 0.5C4.6 0.5 3.5 1.6 3.5 3V12.1C2.6 12.8 2 13.9 2 15C2 17.2 3.8 19 6 19C8.2 19 10 17.2 10 15C10 13.9 9.4 12.8 8.5 12.1V3C8.5 1.6 7.4 0.5 6 0.5Z" stroke="#C3C2C1" strokeWidth="1" fill="none"/>
+    </svg>
+  );
+}
+
+// Thermometer SVG - fully filled (red - same as humidity bad)
+function ThermometerFull({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 12 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4.5" y="3" width="3" height="9.5" fill="#c62828" rx="0.5"/>
+      <circle cx="6" cy="15" r="2" fill="#c62828"/>
+      <path d="M6 0.5C4.6 0.5 3.5 1.6 3.5 3V12.1C2.6 12.8 2 13.9 2 15C2 17.2 3.8 19 6 19C8.2 19 10 17.2 10 15C10 13.9 9.4 12.8 8.5 12.1V3C8.5 1.6 7.4 0.5 6 0.5Z" stroke="#C3C2C1" strokeWidth="1" fill="none"/>
+    </svg>
+  );
+}
+
 // Humidity indicator with water drop that fills based on level (Bambu Lab style)
 // Reference: https://github.com/theicedmango/bambu-humidity
-function HumidityIndicator({ humidity }: { humidity: number | string }) {
-  const humidityValue = typeof humidity === 'string' ? parseInt(humidity, 10) : humidity;
+interface HumidityIndicatorProps {
+  humidity: number | string;
+  goodThreshold?: number;  // <= this is green
+  fairThreshold?: number;  // <= this is orange, > is red
+}
 
-  // Status thresholds from bambu-humidity:
-  // Good: ≤40% (green #22a352), Fair: 41-60% (gold #d4a017), Bad: >60% (red #c62828)
+function HumidityIndicator({ humidity, goodThreshold = 40, fairThreshold = 60 }: HumidityIndicatorProps) {
+  const humidityValue = typeof humidity === 'string' ? parseInt(humidity, 10) : humidity;
+  const good = typeof goodThreshold === 'number' ? goodThreshold : 40;
+  const fair = typeof fairThreshold === 'number' ? fairThreshold : 60;
+
+  // Status thresholds (configurable via settings)
+  // Good: ≤goodThreshold (green #22a352), Fair: ≤fairThreshold (gold #d4a017), Bad: >fairThreshold (red #c62828)
   let textColor: string;
   let statusText: string;
 
   if (isNaN(humidityValue)) {
     textColor = '#C3C2C1';
     statusText = 'Unknown';
-  } else if (humidityValue <= 40) {
+  } else if (humidityValue <= good) {
     textColor = '#22a352'; // Green - Good
     statusText = 'Good';
-  } else if (humidityValue <= 60) {
+  } else if (humidityValue <= fair) {
     textColor = '#d4a017'; // Gold - Fair
     statusText = 'Fair';
   } else {
@@ -107,22 +147,57 @@ function HumidityIndicator({ humidity }: { humidity: number | string }) {
     statusText = 'Bad';
   }
 
-  // Fill level based on humidity (matching bambu-humidity visual style)
-  // ≤40% (Good): Half fill, 41-60% (Fair): Full fill, >60% (Bad): Full fill
+  // Fill level based on status: Good=Empty (dry), Fair=Half, Bad=Full (wet)
   let DropComponent: React.FC<{ className?: string }>;
   if (isNaN(humidityValue)) {
     DropComponent = WaterDropEmpty;
-  } else if (humidityValue <= 40) {
-    DropComponent = WaterDropHalf;
+  } else if (humidityValue <= good) {
+    DropComponent = WaterDropEmpty; // Good - empty drop (dry)
+  } else if (humidityValue <= fair) {
+    DropComponent = WaterDropHalf; // Fair - half filled
   } else {
-    DropComponent = WaterDropFull;
+    DropComponent = WaterDropFull; // Bad - full (too humid)
   }
 
   return (
-    <div className="flex items-center gap-1" title={`Humidity: ${humidityValue}% - ${statusText}`}>
+    <div className="flex items-center justify-end gap-1" title={`Humidity: ${humidityValue}% - ${statusText}`}>
       <DropComponent className="w-3 h-4" />
-      <span className="text-xs font-medium" style={{ color: textColor }}>{humidityValue}%</span>
+      <span className="text-xs font-medium tabular-nums w-8 text-right" style={{ color: textColor }}>{humidityValue}%</span>
     </div>
+  );
+}
+
+// Temperature indicator with dynamic icon and coloring
+interface TemperatureIndicatorProps {
+  temp: number;
+  goodThreshold?: number;  // <= this is blue
+  fairThreshold?: number;  // <= this is orange, > is red
+}
+
+function TemperatureIndicator({ temp, goodThreshold = 28, fairThreshold = 35 }: TemperatureIndicatorProps) {
+  // Ensure thresholds are numbers
+  const good = typeof goodThreshold === 'number' ? goodThreshold : 28;
+  const fair = typeof fairThreshold === 'number' ? fairThreshold : 35;
+
+  let textColor: string;
+  let ThermoComponent: React.FC<{ className?: string }>;
+
+  if (temp <= good) {
+    textColor = '#22a352'; // Green - good (same as humidity)
+    ThermoComponent = ThermometerEmpty;
+  } else if (temp <= fair) {
+    textColor = '#d4a017'; // Gold - fair (same as humidity)
+    ThermoComponent = ThermometerHalf;
+  } else {
+    textColor = '#c62828'; // Red - bad (same as humidity)
+    ThermoComponent = ThermometerFull;
+  }
+
+  return (
+    <span className="flex items-center gap-1" title="Temperature">
+      <ThermoComponent className="w-3 h-4" />
+      <span className="tabular-nums w-12 text-right" style={{ color: textColor }}>{temp}°C</span>
+    </span>
   );
 }
 
@@ -259,10 +334,14 @@ function StatusSummaryBar({ printers }: { printers: Printer[] | undefined }) {
     let printing = 0;
     let idle = 0;
     let offline = 0;
+    let loading = 0;
 
     printers?.forEach((printer) => {
       const status = queryClient.getQueryData<{ connected: boolean; state: string | null }>(['printerStatus', printer.id]);
-      if (!status?.connected) {
+      if (status === undefined) {
+        // Status not yet loaded - don't count as offline yet
+        loading++;
+      } else if (!status.connected) {
         offline++;
       } else if (status.state === 'RUNNING') {
         printing++;
@@ -271,7 +350,7 @@ function StatusSummaryBar({ printers }: { printers: Printer[] | undefined }) {
       }
     });
 
-    return { printing, idle, offline, total: (printers?.length || 0) };
+    return { printing, idle, offline, loading, total: (printers?.length || 0) };
   }, [printers, queryClient]);
 
   // Subscribe to query cache changes to re-render when status updates
@@ -323,11 +402,18 @@ function PrinterCard({
   hideIfDisconnected,
   maintenanceInfo,
   viewMode = 'expanded',
+  amsThresholds,
 }: {
   printer: Printer;
   hideIfDisconnected?: boolean;
   maintenanceInfo?: PrinterMaintenanceInfo;
   viewMode?: ViewMode;
+  amsThresholds?: {
+    humidityGood: number;
+    humidityFair: number;
+    tempGood: number;
+    tempFair: number;
+  };
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -851,13 +937,20 @@ function PrinterCard({
                         {(ams.humidity != null || ams.temp != null) && (
                           <div className="flex items-center gap-3 text-xs">
                             {ams.humidity != null && (
-                              <HumidityIndicator humidity={ams.humidity} />
+                              <div className="w-14 text-right">
+                                <HumidityIndicator
+                                  humidity={ams.humidity}
+                                  goodThreshold={amsThresholds?.humidityGood}
+                                  fairThreshold={amsThresholds?.humidityFair}
+                                />
+                              </div>
                             )}
                             {ams.temp != null && (
-                              <span className="flex items-center gap-1 text-orange-400" title="Temperature">
-                                <Thermometer className="w-3 h-3" />
-                                {ams.temp}°C
-                              </span>
+                              <TemperatureIndicator
+                                temp={ams.temp}
+                                goodThreshold={amsThresholds?.tempGood}
+                                fairThreshold={amsThresholds?.tempFair}
+                              />
                             )}
                           </div>
                         )}
@@ -1480,6 +1573,12 @@ export function PrintersPage() {
     queryFn: api.getPrinters,
   });
 
+  // Fetch app settings for AMS thresholds
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: api.getSettings,
+  });
+
   // Fetch all smart plugs to know which printers have them
   const { data: smartPlugs } = useQuery({
     queryKey: ['smart-plugs'],
@@ -1761,6 +1860,12 @@ export function PrintersPage() {
                     hideIfDisconnected={hideDisconnected}
                     maintenanceInfo={maintenanceByPrinter[printer.id]}
                     viewMode={viewMode}
+                    amsThresholds={settings ? {
+                      humidityGood: Number(settings.ams_humidity_good) || 40,
+                      humidityFair: Number(settings.ams_humidity_fair) || 60,
+                      tempGood: Number(settings.ams_temp_good) || 28,
+                      tempFair: Number(settings.ams_temp_fair) || 35,
+                    } : undefined}
                   />
                 ))}
               </div>
@@ -1781,6 +1886,12 @@ export function PrintersPage() {
               hideIfDisconnected={hideDisconnected}
               maintenanceInfo={maintenanceByPrinter[printer.id]}
               viewMode={viewMode}
+              amsThresholds={settings ? {
+                humidityGood: Number(settings.ams_humidity_good) || 40,
+                humidityFair: Number(settings.ams_humidity_fair) || 60,
+                tempGood: Number(settings.ams_temp_good) || 28,
+                tempFair: Number(settings.ams_temp_fair) || 35,
+              } : undefined}
             />
           ))}
         </div>
