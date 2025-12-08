@@ -12,11 +12,13 @@ interface AddNotificationModalProps {
 }
 
 const PROVIDER_OPTIONS: { value: ProviderType; label: string; description: string }[] = [
-  { value: 'callmebot', label: 'CallMeBot/WhatsApp', description: 'Free WhatsApp notifications via CallMeBot' },
+  { value: 'discord', label: 'Discord', description: 'Send to Discord channel via webhook' },
+  { value: 'telegram', label: 'Telegram', description: 'Notifications via Telegram bot' },
   { value: 'ntfy', label: 'ntfy', description: 'Free, self-hostable push notifications' },
   { value: 'pushover', label: 'Pushover', description: 'Simple, reliable push notifications' },
-  { value: 'telegram', label: 'Telegram', description: 'Notifications via Telegram bot' },
   { value: 'email', label: 'Email', description: 'SMTP email notifications' },
+  { value: 'callmebot', label: 'CallMeBot/WhatsApp', description: 'Free WhatsApp notifications via CallMeBot' },
+  { value: 'webhook', label: 'Webhook', description: 'Generic HTTP POST to any URL' },
 ];
 
 export function AddNotificationModal({ provider, onClose }: AddNotificationModalProps) {
@@ -24,11 +26,15 @@ export function AddNotificationModal({ provider, onClose }: AddNotificationModal
   const isEditing = !!provider;
 
   const [name, setName] = useState(provider?.name || '');
-  const [providerType, setProviderType] = useState<ProviderType>(provider?.provider_type || 'ntfy');
+  const [providerType, setProviderType] = useState<ProviderType>(provider?.provider_type || 'discord');
   const [printerId, setPrinterId] = useState<number | null>(provider?.printer_id || null);
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(provider?.quiet_hours_enabled || false);
   const [quietHoursStart, setQuietHoursStart] = useState(provider?.quiet_hours_start || '22:00');
   const [quietHoursEnd, setQuietHoursEnd] = useState(provider?.quiet_hours_end || '07:00');
+
+  // Daily digest
+  const [dailyDigestEnabled, setDailyDigestEnabled] = useState(provider?.daily_digest_enabled || false);
+  const [dailyDigestTime, setDailyDigestTime] = useState(provider?.daily_digest_time || '08:00');
 
   // Event toggles
   const [onPrintStart, setOnPrintStart] = useState(provider?.on_print_start ?? false);
@@ -126,6 +132,9 @@ export function AddNotificationModal({ provider, onClose }: AddNotificationModal
       quiet_hours_enabled: quietHoursEnabled,
       quiet_hours_start: quietHoursEnabled ? quietHoursStart : null,
       quiet_hours_end: quietHoursEnabled ? quietHoursEnd : null,
+      // Daily digest
+      daily_digest_enabled: dailyDigestEnabled,
+      daily_digest_time: dailyDigestEnabled ? dailyDigestTime : null,
       // Event toggles
       on_print_start: onPrintStart,
       on_print_complete: onPrintComplete,
@@ -189,6 +198,17 @@ export function AddNotificationModal({ provider, onClose }: AddNotificationModal
           { key: 'password', label: 'Password', placeholder: 'App password', type: 'password', required: false },
           { key: 'from_email', label: 'From Email', placeholder: 'your@email.com', type: 'text', required: true },
           { key: 'to_email', label: 'To Email', placeholder: 'recipient@email.com', type: 'text', required: true },
+        ];
+      case 'discord':
+        return [
+          { key: 'webhook_url', label: 'Webhook URL', placeholder: 'https://discord.com/api/webhooks/...', type: 'text', required: true },
+        ];
+      case 'webhook':
+        return [
+          { key: 'webhook_url', label: 'Webhook URL', placeholder: 'https://example.com/webhook', type: 'text', required: true },
+          { key: 'auth_header', label: 'Authorization', placeholder: 'Bearer token (optional)', type: 'password', required: false },
+          { key: 'field_title', label: 'Title Field Name', placeholder: 'title', type: 'text', required: false },
+          { key: 'field_message', label: 'Message Field Name', placeholder: 'message', type: 'text', required: false },
         ];
       default:
         return [];
@@ -397,6 +417,34 @@ export function AddNotificationModal({ provider, onClose }: AddNotificationModal
                     className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
                   />
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Daily Digest */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm text-white">Daily Digest</label>
+                <p className="text-xs text-bambu-gray">Batch notifications into a single daily summary</p>
+              </div>
+              <Toggle
+                checked={dailyDigestEnabled}
+                onChange={setDailyDigestEnabled}
+              />
+            </div>
+            {dailyDigestEnabled && (
+              <div>
+                <label className="block text-xs text-bambu-gray mb-1">Send digest at</label>
+                <input
+                  type="time"
+                  value={dailyDigestTime}
+                  onChange={(e) => setDailyDigestTime(e.target.value)}
+                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                />
+                <p className="text-xs text-bambu-gray mt-1">
+                  Events will be collected and sent as a single summary at this time
+                </p>
               </div>
             )}
           </div>

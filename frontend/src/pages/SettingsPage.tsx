@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Plus, Plug, AlertTriangle, RotateCcw, Bell, Download, RefreshCw, ExternalLink, Globe, Droplets, Thermometer, FileText, Edit2 } from 'lucide-react';
+import { Loader2, Plus, Plug, AlertTriangle, RotateCcw, Bell, Download, RefreshCw, ExternalLink, Globe, Droplets, Thermometer, FileText, Edit2, Send, CheckCircle, XCircle, History, Trash2, Upload, Zap, TrendingUp, Calendar, DollarSign, Power, PowerOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
-import type { AppSettings, SmartPlug, NotificationProvider, NotificationTemplate, UpdateStatus } from '../api/client';
+import type { AppSettings, SmartPlug, SmartPlugStatus, NotificationProvider, NotificationTemplate, UpdateStatus } from '../api/client';
 import { Card, CardContent, CardHeader } from '../components/Card';
 import { Button } from '../components/Button';
 import { SmartPlugCard } from '../components/SmartPlugCard';
@@ -10,6 +10,8 @@ import { AddSmartPlugModal } from '../components/AddSmartPlugModal';
 import { NotificationProviderCard } from '../components/NotificationProviderCard';
 import { AddNotificationModal } from '../components/AddNotificationModal';
 import { NotificationTemplateEditor } from '../components/NotificationTemplateEditor';
+import { NotificationLogViewer } from '../components/NotificationLogViewer';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { SpoolmanSettings } from '../components/SpoolmanSettings';
 import { defaultNavItems, getDefaultView, setDefaultView } from '../components/Layout';
 import { availableLanguages } from '../i18n';
@@ -26,8 +28,15 @@ export function SettingsPage() {
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState<NotificationProvider | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<NotificationTemplate | null>(null);
+  const [showLogViewer, setShowLogViewer] = useState(false);
   const [defaultView, setDefaultViewState] = useState<string>(getDefaultView());
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<'general' | 'plugs' | 'notifications'>('general');
+
+  // Confirm modal states
+  const [showClearLogsConfirm, setShowClearLogsConfirm] = useState(false);
+  const [showClearStorageConfirm, setShowClearStorageConfirm] = useState(false);
+  const [showBulkPlugConfirm, setShowBulkPlugConfirm] = useState<'on' | 'off' | null>(null);
 
   const handleDefaultViewChange = (path: string) => {
     setDefaultViewState(path);
@@ -49,9 +58,60 @@ export function SettingsPage() {
     queryFn: api.getSmartPlugs,
   });
 
+  // Fetch energy data for all smart plugs when on the plugs tab
+  const { data: plugEnergySummary, isLoading: energyLoading } = useQuery({
+    queryKey: ['smart-plugs-energy', smartPlugs?.map(p => p.id)],
+    queryFn: async () => {
+      if (!smartPlugs || smartPlugs.length === 0) return null;
+      const statuses = await Promise.all(
+        smartPlugs.filter(p => p.enabled).map(async (plug) => {
+          try {
+            const status = await api.getSmartPlugStatus(plug.id);
+            return { plug, status };
+          } catch {
+            return { plug, status: null as SmartPlugStatus | null };
+          }
+        })
+      );
+
+      // Aggregate energy data
+      let totalPower = 0;
+      let totalToday = 0;
+      let totalYesterday = 0;
+      let totalLifetime = 0;
+      let reachableCount = 0;
+
+      for (const { status } of statuses) {
+        if (status?.reachable && status.energy) {
+          reachableCount++;
+          if (status.energy.power != null) totalPower += status.energy.power;
+          if (status.energy.today != null) totalToday += status.energy.today;
+          if (status.energy.yesterday != null) totalYesterday += status.energy.yesterday;
+          if (status.energy.total != null) totalLifetime += status.energy.total;
+        }
+      }
+
+      return {
+        totalPower,
+        totalToday,
+        totalYesterday,
+        totalLifetime,
+        reachableCount,
+        totalPlugs: smartPlugs.filter(p => p.enabled).length,
+      };
+    },
+    enabled: activeTab === 'plugs' && !!smartPlugs && smartPlugs.length > 0,
+    refetchInterval: activeTab === 'plugs' ? 10000 : false, // Refresh every 10s when on plugs tab
+  });
+
   const { data: notificationProviders, isLoading: providersLoading } = useQuery({
     queryKey: ['notification-providers'],
     queryFn: api.getNotificationProviders,
+  });
+
+  const { data: printers } = useQuery({
+    queryKey: ['printers'],
+    queryFn: api.getPrinters,
   });
 
   const { data: notificationTemplates, isLoading: templatesLoading } = useQuery({
@@ -92,6 +152,70 @@ export function SettingsPage() {
     mutationFn: api.applyUpdate,
     onSuccess: () => {
       refetchUpdateStatus();
+    },
+  });
+
+  // Test all notification providers
+  const [testAllResult, setTestAllResult] = useState<{
+    tested: number;
+    success: number;
+    failed: number;
+    results: Array<{
+      provider_id: number;
+      provider_name: string;
+      provider_type: string;
+      success: boolean;
+      message: string;
+    }>;
+  } | null>(null);
+
+  const testAllMutation = useMutation({
+    mutationFn: api.testAllNotificationProviders,
+    onSuccess: (data) => {
+      setTestAllResult(data);
+      queryClient.invalidateQueries({ queryKey: ['notification-providers'] });
+      if (data.failed === 0) {
+        showToast(`All ${data.tested} providers tested successfully!`, 'success');
+      } else {
+        showToast(`${data.success}/${data.tested} providers succeeded`, data.failed > 0 ? 'error' : 'success');
+      }
+    },
+    onError: (error: Error) => {
+      showToast(`Failed to test providers: ${error.message}`, 'error');
+    },
+  });
+
+  // Bulk action for smart plugs
+  const bulkPlugActionMutation = useMutation({
+    mutationFn: async (action: 'on' | 'off') => {
+      if (!smartPlugs) return { success: 0, failed: 0 };
+      const enabledPlugs = smartPlugs.filter(p => p.enabled);
+      const results = await Promise.all(
+        enabledPlugs.map(async (plug) => {
+          try {
+            await api.controlSmartPlug(plug.id, action);
+            return { success: true };
+          } catch {
+            return { success: false };
+          }
+        })
+      );
+      return {
+        success: results.filter(r => r.success).length,
+        failed: results.filter(r => !r.success).length,
+      };
+    },
+    onSuccess: (data, action) => {
+      queryClient.invalidateQueries({ queryKey: ['smart-plugs'] });
+      queryClient.invalidateQueries({ queryKey: ['smart-plugs-energy'] });
+      if (data.failed === 0) {
+        showToast(`All ${data.success} plugs turned ${action}`, 'success');
+      } else {
+        showToast(`${data.success} plugs turned ${action}, ${data.failed} failed`, 'error');
+      }
+    },
+    onError: (error: Error) => {
+      showToast(`Failed: ${error.message}`, 'error');
     },
   });
 
@@ -144,7 +268,10 @@ export function SettingsPage() {
       settings.ams_humidity_good !== localSettings.ams_humidity_good ||
       settings.ams_humidity_fair !== localSettings.ams_humidity_fair ||
       settings.ams_temp_good !== localSettings.ams_temp_good ||
-      settings.ams_temp_fair !== localSettings.ams_temp_fair;
+      settings.ams_temp_fair !== localSettings.ams_temp_fair ||
+      settings.date_format !== localSettings.date_format ||
+      settings.time_format !== localSettings.time_format ||
+      settings.default_printer_id !== localSettings.default_printer_id;
 
     if (!hasChanges) {
       return;
@@ -238,6 +365,120 @@ export function SettingsPage() {
       <div className="flex gap-8">
         {/* Left Column - General Settings */}
         <div className="space-y-6 flex-1 max-w-xl">
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-white">{t('settings.general')}</h2>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="block text-sm text-bambu-gray mb-1">
+                  <Globe className="w-4 h-4 inline mr-1" />
+                  {t('settings.language')}
+                </label>
+                <select
+                  value={i18n.language}
+                  onChange={(e) => i18n.changeLanguage(e.target.value)}
+                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                >
+                  {availableLanguages.map((lang) => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.nativeName} ({lang.name})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-bambu-gray mt-1">
+                  {t('settings.languageDescription')}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm text-bambu-gray mb-1">
+                  {t('settings.defaultView')}
+                </label>
+                <select
+                  value={defaultView}
+                  onChange={(e) => handleDefaultViewChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                >
+                  {defaultNavItems.map((item) => (
+                    <option key={item.id} value={item.to}>
+                      {t(item.labelKey)}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-bambu-gray mt-1">
+                  {t('settings.defaultViewDescription')}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm text-bambu-gray mb-1">
+                    Date Format
+                  </label>
+                  <select
+                    value={localSettings.date_format || 'system'}
+                    onChange={(e) => updateSetting('date_format', e.target.value as 'system' | 'us' | 'eu' | 'iso')}
+                    className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                  >
+                    <option value="system">System Default</option>
+                    <option value="us">US (MM/DD/YYYY)</option>
+                    <option value="eu">EU (DD/MM/YYYY)</option>
+                    <option value="iso">ISO (YYYY-MM-DD)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-bambu-gray mb-1">
+                    Time Format
+                  </label>
+                  <select
+                    value={localSettings.time_format || 'system'}
+                    onChange={(e) => updateSetting('time_format', e.target.value as 'system' | '12h' | '24h')}
+                    className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                  >
+                    <option value="system">System Default</option>
+                    <option value="12h">12-hour (3:30 PM)</option>
+                    <option value="24h">24-hour (15:30)</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-bambu-gray mb-1">
+                  Default Printer
+                </label>
+                <select
+                  value={localSettings.default_printer_id ?? ''}
+                  onChange={(e) => updateSetting('default_printer_id', e.target.value ? Number(e.target.value) : null)}
+                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                >
+                  <option value="">No default (ask each time)</option>
+                  {printers?.map((printer) => (
+                    <option key={printer.id} value={printer.id}>
+                      {printer.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-bambu-gray mt-1">
+                  Pre-select this printer for uploads, reprints, and other operations.
+                </p>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white">Sidebar order</p>
+                  <p className="text-sm text-bambu-gray">
+                    Drag items in the sidebar to reorder. Reset to default order here.
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleResetSidebarOrder}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Reset
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <h2 className="text-lg font-semibold text-white">Archive Settings</h2>
@@ -379,69 +620,6 @@ export function SettingsPage() {
                     ? 'Dashboard shows sum of energy used during prints'
                     : 'Dashboard shows lifetime energy from smart plugs'}
                 </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <h2 className="text-lg font-semibold text-white">{t('settings.general')}</h2>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="block text-sm text-bambu-gray mb-1">
-                  <Globe className="w-4 h-4 inline mr-1" />
-                  {t('settings.language')}
-                </label>
-                <select
-                  value={i18n.language}
-                  onChange={(e) => i18n.changeLanguage(e.target.value)}
-                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
-                >
-                  {availableLanguages.map((lang) => (
-                    <option key={lang.code} value={lang.code}>
-                      {lang.nativeName} ({lang.name})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-bambu-gray mt-1">
-                  {t('settings.languageDescription')}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm text-bambu-gray mb-1">
-                  {t('settings.defaultView')}
-                </label>
-                <select
-                  value={defaultView}
-                  onChange={(e) => handleDefaultViewChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
-                >
-                  {defaultNavItems.map((item) => (
-                    <option key={item.id} value={item.to}>
-                      {t(item.labelKey)}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-bambu-gray mt-1">
-                  {t('settings.defaultViewDescription')}
-                </p>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white">Sidebar order</p>
-                  <p className="text-sm text-bambu-gray">
-                    Drag items in the sidebar to reorder. Reset to default order here.
-                  </p>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleResetSidebarOrder}
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Reset
-                </Button>
               </div>
             </CardContent>
           </Card>
@@ -678,6 +856,121 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Data Management */}
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-white">Data Management</h2>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Backup/Restore */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white">Backup Settings</p>
+                  <p className="text-sm text-bambu-gray">
+                    Export settings, providers, and plugs to JSON
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const backup = await api.exportBackup();
+                      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `bambutrack-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      showToast('Backup downloaded', 'success');
+                    } catch (err) {
+                      showToast('Failed to create backup', 'error');
+                    }
+                  }}
+                >
+                  <Download className="w-4 h-4" />
+                  Export
+                </Button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white">Restore Settings</p>
+                  <p className="text-sm text-bambu-gray">
+                    Import settings from a backup file
+                  </p>
+                </div>
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const result = await api.importBackup(file);
+                        if (result.success) {
+                          showToast(result.message, 'success');
+                          queryClient.invalidateQueries();
+                        } else {
+                          showToast(result.message, 'error');
+                        }
+                      } catch (err) {
+                        showToast('Failed to restore backup', 'error');
+                      }
+                      e.target.value = '';
+                    }}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="w-4 h-4" />
+                    Import
+                  </Button>
+                </div>
+              </div>
+
+              <div className="border-t border-bambu-dark-tertiary pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-white">Clear Notification Logs</p>
+                    <p className="text-sm text-bambu-gray">
+                      Delete notification logs older than 30 days
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowClearLogsConfirm(true)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white">Clear Local Storage</p>
+                  <p className="text-sm text-bambu-gray">
+                    Clear browser cache (sidebar order, preferences)
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowClearStorageConfirm(true)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Clear
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
       )}
@@ -685,7 +978,7 @@ export function SettingsPage() {
       {/* Smart Plugs Tab */}
       {activeTab === 'plugs' && (
         <div className="max-w-4xl">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-start justify-between mb-6">
             <div>
               <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                 <Plug className="w-5 h-5 text-bambu-green" />
@@ -695,16 +988,143 @@ export function SettingsPage() {
                 Connect Tasmota-based smart plugs to automate power control and track energy usage for your printers.
               </p>
             </div>
-            <Button
-              onClick={() => {
-                setEditingPlug(null);
-                setShowPlugModal(true);
-              }}
-            >
-              <Plus className="w-4 h-4" />
-              Add Smart Plug
-            </Button>
+            <div className="flex items-center gap-2 pt-1 shrink-0">
+              {smartPlugs && smartPlugs.filter(p => p.enabled).length > 1 && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="whitespace-nowrap"
+                    onClick={() => setShowBulkPlugConfirm('on')}
+                    disabled={bulkPlugActionMutation.isPending}
+                    title="Turn all plugs on"
+                  >
+                    {bulkPlugActionMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Power className="w-4 h-4 text-bambu-green" />
+                    )}
+                    All On
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="whitespace-nowrap"
+                    onClick={() => setShowBulkPlugConfirm('off')}
+                    disabled={bulkPlugActionMutation.isPending}
+                    title="Turn all plugs off"
+                  >
+                    {bulkPlugActionMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <PowerOff className="w-4 h-4 text-red-400" />
+                    )}
+                    All Off
+                  </Button>
+                </>
+              )}
+              <Button
+                className="whitespace-nowrap"
+                onClick={() => {
+                  setEditingPlug(null);
+                  setShowPlugModal(true);
+                }}
+              >
+                <Plus className="w-4 h-4" />
+                Add Smart Plug
+              </Button>
+            </div>
           </div>
+
+          {/* Energy Summary Card */}
+          {smartPlugs && smartPlugs.length > 0 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-yellow-400" />
+                  Energy Summary
+                  {energyLoading && (
+                    <Loader2 className="w-4 h-4 animate-spin text-bambu-gray ml-2" />
+                  )}
+                </h3>
+              </CardHeader>
+              <CardContent>
+                {plugEnergySummary ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* Current Power */}
+                    <div className="bg-bambu-dark rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-bambu-gray text-xs mb-1">
+                        <Zap className="w-3 h-3" />
+                        Current Power
+                      </div>
+                      <div className="text-xl font-bold text-white">
+                        {plugEnergySummary.totalPower.toFixed(1)}
+                        <span className="text-sm font-normal text-bambu-gray ml-1">W</span>
+                      </div>
+                      <div className="text-xs text-bambu-gray mt-1">
+                        {plugEnergySummary.reachableCount}/{plugEnergySummary.totalPlugs} plugs online
+                      </div>
+                    </div>
+
+                    {/* Today */}
+                    <div className="bg-bambu-dark rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-bambu-gray text-xs mb-1">
+                        <Calendar className="w-3 h-3" />
+                        Today
+                      </div>
+                      <div className="text-xl font-bold text-white">
+                        {plugEnergySummary.totalToday.toFixed(2)}
+                        <span className="text-sm font-normal text-bambu-gray ml-1">kWh</span>
+                      </div>
+                      {localSettings && localSettings.energy_cost_per_kwh > 0 && (
+                        <div className="text-xs text-bambu-gray mt-1">
+                          ~{(plugEnergySummary.totalToday * localSettings.energy_cost_per_kwh).toFixed(2)} {localSettings.currency}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Yesterday */}
+                    <div className="bg-bambu-dark rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-bambu-gray text-xs mb-1">
+                        <TrendingUp className="w-3 h-3" />
+                        Yesterday
+                      </div>
+                      <div className="text-xl font-bold text-white">
+                        {plugEnergySummary.totalYesterday.toFixed(2)}
+                        <span className="text-sm font-normal text-bambu-gray ml-1">kWh</span>
+                      </div>
+                      {localSettings && localSettings.energy_cost_per_kwh > 0 && (
+                        <div className="text-xs text-bambu-gray mt-1">
+                          ~{(plugEnergySummary.totalYesterday * localSettings.energy_cost_per_kwh).toFixed(2)} {localSettings.currency}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Total Lifetime */}
+                    <div className="bg-bambu-dark rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-bambu-gray text-xs mb-1">
+                        <DollarSign className="w-3 h-3" />
+                        Total
+                      </div>
+                      <div className="text-xl font-bold text-white">
+                        {plugEnergySummary.totalLifetime.toFixed(1)}
+                        <span className="text-sm font-normal text-bambu-gray ml-1">kWh</span>
+                      </div>
+                      {localSettings && localSettings.energy_cost_per_kwh > 0 && (
+                        <div className="text-xs text-bambu-gray mt-1">
+                          ~{(plugEnergySummary.totalLifetime * localSettings.energy_cost_per_kwh).toFixed(2)} {localSettings.currency}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : !energyLoading ? (
+                  <p className="text-sm text-bambu-gray">
+                    Enable plugs to see energy summary
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
 
           {plugsLoading ? (
             <div className="flex justify-center py-12">
@@ -756,16 +1176,44 @@ export function SettingsPage() {
                 <Bell className="w-5 h-5 text-bambu-green" />
                 Providers
               </h2>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditingProvider(null);
-                  setShowNotificationModal(true);
-                }}
-              >
-                <Plus className="w-4 h-4" />
-                Add
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setShowLogViewer(true)}
+                >
+                  <History className="w-4 h-4" />
+                  Log
+                </Button>
+                {notificationProviders && notificationProviders.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setTestAllResult(null);
+                      testAllMutation.mutate();
+                    }}
+                    disabled={testAllMutation.isPending}
+                  >
+                    {testAllMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                    Test All
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingProvider(null);
+                    setShowNotificationModal(true);
+                  }}
+                >
+                  <Plus className="w-4 h-4" />
+                  Add
+                </Button>
+              </div>
             </div>
 
             {/* Notification Language Setting */}
@@ -790,6 +1238,44 @@ export function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Test All Results */}
+            {testAllResult && (
+              <Card className="mb-4">
+                <CardContent className="py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-white">Test Results</span>
+                    <button
+                      onClick={() => setTestAllResult(null)}
+                      className="text-bambu-gray hover:text-white text-xs"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm mb-2">
+                    <span className="flex items-center gap-1 text-bambu-green">
+                      <CheckCircle className="w-4 h-4" />
+                      {testAllResult.success} passed
+                    </span>
+                    {testAllResult.failed > 0 && (
+                      <span className="flex items-center gap-1 text-red-400">
+                        <XCircle className="w-4 h-4" />
+                        {testAllResult.failed} failed
+                      </span>
+                    )}
+                  </div>
+                  {testAllResult.results.filter(r => !r.success).length > 0 && (
+                    <div className="space-y-1 mt-2 pt-2 border-t border-bambu-dark-tertiary">
+                      {testAllResult.results.filter(r => !r.success).map((result) => (
+                        <div key={result.provider_id} className="text-xs text-red-400">
+                          <span className="font-medium">{result.provider_name}:</span> {result.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {providersLoading ? (
               <div className="flex justify-center py-12">
@@ -916,6 +1402,66 @@ export function SettingsPage() {
         <NotificationTemplateEditor
           template={editingTemplate}
           onClose={() => setEditingTemplate(null)}
+        />
+      )}
+
+      {/* Notification Log Viewer */}
+      {showLogViewer && (
+        <NotificationLogViewer
+          onClose={() => setShowLogViewer(false)}
+        />
+      )}
+
+      {/* Confirm Modal: Clear Notification Logs */}
+      {showClearLogsConfirm && (
+        <ConfirmModal
+          title="Clear Notification Logs"
+          message="This will permanently delete all notification logs older than 30 days. This action cannot be undone."
+          confirmText="Clear Logs"
+          variant="warning"
+          onConfirm={async () => {
+            setShowClearLogsConfirm(false);
+            try {
+              const result = await api.clearNotificationLogs(30);
+              showToast(result.message, 'success');
+            } catch {
+              showToast('Failed to clear logs', 'error');
+            }
+          }}
+          onCancel={() => setShowClearLogsConfirm(false)}
+        />
+      )}
+
+      {/* Confirm Modal: Clear Local Storage */}
+      {showClearStorageConfirm && (
+        <ConfirmModal
+          title="Clear All Local Storage"
+          message="WARNING: This will clear ALL browser data for Bambusy including your sidebar order, preferences, and cached data. The page will reload after clearing. This action cannot be undone!"
+          confirmText="Clear Everything"
+          variant="danger"
+          onConfirm={() => {
+            setShowClearStorageConfirm(false);
+            localStorage.clear();
+            showToast('Local storage cleared. Refreshing...', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+          }}
+          onCancel={() => setShowClearStorageConfirm(false)}
+        />
+      )}
+
+      {/* Confirm Modal: Bulk Plug Action */}
+      {showBulkPlugConfirm && (
+        <ConfirmModal
+          title={`Turn All Plugs ${showBulkPlugConfirm === 'on' ? 'On' : 'Off'}`}
+          message={`This will turn ${showBulkPlugConfirm === 'on' ? 'ON' : 'OFF'} all ${smartPlugs?.filter(p => p.enabled).length || 0} enabled smart plugs. ${showBulkPlugConfirm === 'off' ? 'Any running printers may be affected!' : ''}`}
+          confirmText={`Turn All ${showBulkPlugConfirm === 'on' ? 'On' : 'Off'}`}
+          variant={showBulkPlugConfirm === 'off' ? 'danger' : 'warning'}
+          onConfirm={() => {
+            const action = showBulkPlugConfirm;
+            setShowBulkPlugConfirm(null);
+            bulkPlugActionMutation.mutate(action);
+          }}
+          onCancel={() => setShowBulkPlugConfirm(null)}
         />
       )}
     </div>

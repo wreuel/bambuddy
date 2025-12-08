@@ -1,5 +1,6 @@
 """Notification service for sending push notifications via various providers."""
 
+import asyncio
 import json
 import logging
 import re
@@ -14,7 +15,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.models.notification import NotificationProvider
+from backend.app.models.notification import NotificationLog, NotificationProvider, NotificationDigestQueue
 from backend.app.models.notification_template import NotificationTemplate
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,8 @@ class NotificationService:
     def __init__(self):
         self._http_client: httpx.AsyncClient | None = None
         self._template_cache: dict[str, NotificationTemplate] = {}
+        self._digest_scheduler_task: asyncio.Task | None = None
+        self._last_digest_check: str = ""  # "HH:MM" to avoid duplicate checks
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
@@ -150,6 +153,10 @@ class NotificationService:
                 return await self._send_telegram(config, f"*{title}*\n{message}")
             elif provider_type == "email":
                 return await self._send_email(config, title, message)
+            elif provider_type == "discord":
+                return await self._send_discord(config, title, message)
+            elif provider_type == "webhook":
+                return await self._send_webhook(config, title, message)
             else:
                 return False, f"Unknown provider type: {provider_type}"
         except Exception as e:
@@ -308,6 +315,70 @@ class NotificationService:
         except Exception as e:
             return False, f"Email error: {str(e)}"
 
+    async def _send_discord(self, config: dict, title: str, message: str) -> tuple[bool, str]:
+        """Send notification via Discord webhook."""
+        webhook_url = config.get("webhook_url", "").strip()
+
+        if not webhook_url:
+            return False, "Webhook URL is required"
+
+        if not webhook_url.startswith("https://discord.com/api/webhooks/"):
+            return False, "Invalid Discord webhook URL"
+
+        # Discord embed format for nicer messages
+        data = {
+            "embeds": [{
+                "title": title,
+                "description": message,
+                "color": 0x00AE42,  # Bambu green
+            }]
+        }
+
+        client = await self._get_client()
+        response = await client.post(webhook_url, json=data)
+
+        if response.status_code in (200, 204):
+            return True, "Message sent successfully"
+        else:
+            return False, f"HTTP {response.status_code}: {response.text[:200]}"
+
+    async def _send_webhook(self, config: dict, title: str, message: str) -> tuple[bool, str]:
+        """Send notification via generic webhook (POST JSON)."""
+        webhook_url = config.get("webhook_url", "").strip()
+        auth_header = config.get("auth_header", "").strip()
+        custom_field_title = config.get("field_title", "title").strip() or "title"
+        custom_field_message = config.get("field_message", "message").strip() or "message"
+
+        if not webhook_url:
+            return False, "Webhook URL is required"
+
+        # Build payload with custom field names
+        data = {
+            custom_field_title: title,
+            custom_field_message: message,
+            "timestamp": datetime.now().isoformat(),
+            "source": "BambuTrack",
+        }
+
+        headers = {"Content-Type": "application/json"}
+        if auth_header:
+            # Support "Bearer token" or just "token" format
+            if " " in auth_header:
+                headers["Authorization"] = auth_header
+            else:
+                headers["Authorization"] = f"Bearer {auth_header}"
+
+        client = await self._get_client()
+        try:
+            response = await client.post(webhook_url, json=data, headers=headers)
+
+            if response.status_code in (200, 201, 202, 204):
+                return True, "Webhook delivered successfully"
+            else:
+                return False, f"HTTP {response.status_code}: {response.text[:200]}"
+        except Exception as e:
+            return False, f"Webhook error: {str(e)}"
+
     async def _send_to_provider(
         self, provider: NotificationProvider, title: str, message: str
     ) -> tuple[bool, str]:
@@ -330,6 +401,10 @@ class NotificationService:
                 return await self._send_telegram(config, f"*{title}*\n{message}")
             elif provider.provider_type == "email":
                 return await self._send_email(config, title, message)
+            elif provider.provider_type == "discord":
+                return await self._send_discord(config, title, message)
+            elif provider.provider_type == "webhook":
+                return await self._send_webhook(config, title, message)
             else:
                 return False, f"Unknown provider type: {provider.provider_type}"
         except Exception as e:
@@ -373,18 +448,75 @@ class NotificationService:
         result = await db.execute(query)
         return list(result.scalars().all())
 
+    async def _log_notification(
+        self,
+        db: AsyncSession,
+        provider_id: int,
+        event_type: str,
+        title: str,
+        message: str,
+        success: bool,
+        error_message: str | None = None,
+        printer_id: int | None = None,
+        printer_name: str | None = None,
+    ):
+        """Create a log entry for a sent notification."""
+        try:
+            log = NotificationLog(
+                provider_id=provider_id,
+                event_type=event_type,
+                title=title,
+                message=message,
+                success=success,
+                error_message=error_message,
+                printer_id=printer_id,
+                printer_name=printer_name,
+            )
+            db.add(log)
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to log notification: {e}")
+            # Don't fail the notification just because logging failed
+
     async def _send_to_providers(
         self,
         providers: list[NotificationProvider],
         title: str,
         message: str,
         db: AsyncSession,
+        event_type: str = "unknown",
+        printer_id: int | None = None,
+        printer_name: str | None = None,
     ):
-        """Send notification to multiple providers."""
+        """Send notification to multiple providers and log the results."""
         for provider in providers:
             try:
+                # Check if provider wants digest mode
+                if provider.daily_digest_enabled and provider.daily_digest_time:
+                    await self._queue_for_digest(
+                        provider=provider,
+                        event_type=event_type,
+                        title=title,
+                        message=message,
+                        db=db,
+                        printer_id=printer_id,
+                        printer_name=printer_name,
+                    )
+                    continue
+
                 success, error = await self._send_to_provider(provider, title, message)
                 await self._update_provider_status(db, provider.id, success, error if not success else None)
+                await self._log_notification(
+                    db=db,
+                    provider_id=provider.id,
+                    event_type=event_type,
+                    title=title,
+                    message=message,
+                    success=success,
+                    error_message=error if not success else None,
+                    printer_id=printer_id,
+                    printer_name=printer_name,
+                )
                 if success:
                     logger.info(f"Sent notification via {provider.name}")
                 else:
@@ -392,6 +524,17 @@ class NotificationService:
             except Exception as e:
                 logger.exception(f"Error sending notification via {provider.name}")
                 await self._update_provider_status(db, provider.id, False, str(e))
+                await self._log_notification(
+                    db=db,
+                    provider_id=provider.id,
+                    event_type=event_type,
+                    title=title,
+                    message=message,
+                    success=False,
+                    error_message=str(e),
+                    printer_id=printer_id,
+                    printer_name=printer_name,
+                )
 
     async def on_print_start(
         self, printer_id: int, printer_name: str, data: dict, db: AsyncSession
@@ -415,7 +558,7 @@ class NotificationService:
 
         logger.info(f"Found {len(providers)} providers for print_start: {[p.name for p in providers]}")
         title, message = await self._build_message_from_template(db, "print_start", variables)
-        await self._send_to_providers(providers, title, message, db)
+        await self._send_to_providers(providers, title, message, db, "print_start", printer_id, printer_name)
 
     async def on_print_complete(
         self,
@@ -469,7 +612,7 @@ class NotificationService:
 
         logger.info(f"Found {len(providers)} providers for {event_field}: {[p.name for p in providers]}")
         title, message = await self._build_message_from_template(db, event_type, variables)
-        await self._send_to_providers(providers, title, message, db)
+        await self._send_to_providers(providers, title, message, db, event_type, printer_id, printer_name)
 
     async def on_print_progress(
         self,
@@ -493,7 +636,7 @@ class NotificationService:
         }
 
         title, message = await self._build_message_from_template(db, "print_progress", variables)
-        await self._send_to_providers(providers, title, message, db)
+        await self._send_to_providers(providers, title, message, db, "print_progress", printer_id, printer_name)
 
     async def on_printer_offline(
         self, printer_id: int, printer_name: str, db: AsyncSession
@@ -506,7 +649,7 @@ class NotificationService:
         variables = {"printer": printer_name}
 
         title, message = await self._build_message_from_template(db, "printer_offline", variables)
-        await self._send_to_providers(providers, title, message, db)
+        await self._send_to_providers(providers, title, message, db, "printer_offline", printer_id, printer_name)
 
     async def on_printer_error(
         self,
@@ -528,7 +671,7 @@ class NotificationService:
         }
 
         title, message = await self._build_message_from_template(db, "printer_error", variables)
-        await self._send_to_providers(providers, title, message, db)
+        await self._send_to_providers(providers, title, message, db, "printer_error", printer_id, printer_name)
 
     async def on_filament_low(
         self,
@@ -552,7 +695,7 @@ class NotificationService:
         }
 
         title, message = await self._build_message_from_template(db, "filament_low", variables)
-        await self._send_to_providers(providers, title, message, db)
+        await self._send_to_providers(providers, title, message, db, "filament_low", printer_id, printer_name)
 
     async def on_maintenance_due(
         self,
@@ -584,11 +727,162 @@ class NotificationService:
 
         logger.info(f"Found {len(providers)} providers for maintenance_due: {[p.name for p in providers]}")
         title, message = await self._build_message_from_template(db, "maintenance_due", variables)
-        await self._send_to_providers(providers, title, message, db)
+        await self._send_to_providers(providers, title, message, db, "maintenance_due", printer_id, printer_name)
 
     def clear_template_cache(self):
         """Clear the template cache. Call this when templates are updated."""
         self._template_cache.clear()
+
+    async def _queue_for_digest(
+        self,
+        provider: NotificationProvider,
+        event_type: str,
+        title: str,
+        message: str,
+        db: AsyncSession,
+        printer_id: int | None = None,
+        printer_name: str | None = None,
+    ):
+        """Queue a notification for later delivery in the daily digest."""
+        try:
+            queue_entry = NotificationDigestQueue(
+                provider_id=provider.id,
+                event_type=event_type,
+                title=title,
+                message=message,
+                printer_id=printer_id,
+                printer_name=printer_name,
+            )
+            db.add(queue_entry)
+            await db.commit()
+            logger.info(f"Queued notification for digest: {event_type} for provider {provider.name}")
+        except Exception as e:
+            logger.warning(f"Failed to queue notification for digest: {e}")
+
+    async def send_digest(self, provider_id: int):
+        """Send all queued notifications as a single digest for a provider."""
+        from backend.app.core.database import async_session
+
+        async with async_session() as db:
+            # Get the provider
+            result = await db.execute(
+                select(NotificationProvider).where(NotificationProvider.id == provider_id)
+            )
+            provider = result.scalar_one_or_none()
+
+            if not provider or not provider.enabled:
+                return
+
+            # Get all queued notifications for this provider
+            result = await db.execute(
+                select(NotificationDigestQueue)
+                .where(NotificationDigestQueue.provider_id == provider_id)
+                .order_by(NotificationDigestQueue.created_at)
+            )
+            queue_entries = list(result.scalars().all())
+
+            if not queue_entries:
+                logger.debug(f"No queued notifications for provider {provider.name}")
+                return
+
+            # Build digest message
+            title = f"Daily Digest - {len(queue_entries)} Events"
+
+            # Group by event type
+            events_by_type: dict[str, list] = {}
+            for entry in queue_entries:
+                if entry.event_type not in events_by_type:
+                    events_by_type[entry.event_type] = []
+                events_by_type[entry.event_type].append(entry)
+
+            # Format the digest body
+            body_parts = []
+            for event_type, entries in events_by_type.items():
+                event_label = event_type.replace("_", " ").title()
+                body_parts.append(f"== {event_label} ({len(entries)}) ==")
+                for entry in entries:
+                    time_str = entry.created_at.strftime("%H:%M")
+                    printer_info = f"[{entry.printer_name}] " if entry.printer_name else ""
+                    body_parts.append(f"  {time_str} {printer_info}{entry.title}")
+                body_parts.append("")
+
+            body = "\n".join(body_parts)
+
+            # Send the digest
+            success, error = await self._send_to_provider(provider, title, body)
+
+            # Log the digest
+            await self._log_notification(
+                db=db,
+                provider_id=provider.id,
+                event_type="daily_digest",
+                title=title,
+                message=body,
+                success=success,
+                error_message=error if not success else None,
+            )
+
+            # Clear the queue
+            for entry in queue_entries:
+                await db.delete(entry)
+            await db.commit()
+
+            if success:
+                logger.info(f"Sent daily digest with {len(queue_entries)} events to {provider.name}")
+            else:
+                logger.warning(f"Failed to send daily digest to {provider.name}: {error}")
+
+    async def check_and_send_digests(self):
+        """Check all providers and send digests if it's their scheduled time."""
+        from backend.app.core.database import async_session
+
+        current_time = datetime.now().strftime("%H:%M")
+
+        # Avoid duplicate checks within the same minute
+        if current_time == self._last_digest_check:
+            return
+        self._last_digest_check = current_time
+
+        async with async_session() as db:
+            # Find all providers with digest enabled at this time
+            result = await db.execute(
+                select(NotificationProvider).where(
+                    NotificationProvider.enabled == True,
+                    NotificationProvider.daily_digest_enabled == True,
+                    NotificationProvider.daily_digest_time == current_time,
+                )
+            )
+            providers = result.scalars().all()
+
+            for provider in providers:
+                try:
+                    await self.send_digest(provider.id)
+                except Exception as e:
+                    logger.error(f"Error sending digest for provider {provider.id}: {e}")
+
+    def start_digest_scheduler(self):
+        """Start the background scheduler for daily digest notifications."""
+        if self._digest_scheduler_task is None:
+            self._digest_scheduler_task = asyncio.create_task(self._digest_scheduler_loop())
+            logger.info("Notification digest scheduler started")
+
+    def stop_digest_scheduler(self):
+        """Stop the background scheduler for daily digests."""
+        if self._digest_scheduler_task:
+            self._digest_scheduler_task.cancel()
+            self._digest_scheduler_task = None
+            logger.info("Notification digest scheduler stopped")
+
+    async def _digest_scheduler_loop(self):
+        """Background loop that checks for scheduled digests every minute."""
+        while True:
+            try:
+                await self.check_and_send_digests()
+            except Exception as e:
+                logger.error(f"Error in digest scheduler: {e}")
+
+            # Wait until the next minute
+            await asyncio.sleep(60)
 
 
 # Global instance

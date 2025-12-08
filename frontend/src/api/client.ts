@@ -252,6 +252,11 @@ export interface AppSettings {
   ams_humidity_fair: number;  // <= this is orange, > is red
   ams_temp_good: number;      // <= this is green/blue
   ams_temp_fair: number;      // <= this is orange, > is red
+  // Date/time format settings
+  date_format: 'system' | 'us' | 'eu' | 'iso';
+  time_format: 'system' | '12h' | '24h';
+  // Default printer
+  default_printer_id: number | null;
 }
 
 export type AppSettingsUpdate = Partial<AppSettings>;
@@ -362,6 +367,16 @@ export interface SmartPlug {
   off_temp_threshold: number;
   username: string | null;
   password: string | null;
+  // Power alerts
+  power_alert_enabled: boolean;
+  power_alert_high: number | null;
+  power_alert_low: number | null;
+  power_alert_last_triggered: string | null;
+  // Schedule
+  schedule_enabled: boolean;
+  schedule_on_time: string | null;
+  schedule_off_time: string | null;
+  // Status
   last_state: string | null;
   last_checked: string | null;
   auto_off_executed: boolean;  // True when auto-off was triggered after print
@@ -381,6 +396,14 @@ export interface SmartPlugCreate {
   off_temp_threshold?: number;
   username?: string | null;
   password?: string | null;
+  // Power alerts
+  power_alert_enabled?: boolean;
+  power_alert_high?: number | null;
+  power_alert_low?: number | null;
+  // Schedule
+  schedule_enabled?: boolean;
+  schedule_on_time?: string | null;
+  schedule_off_time?: string | null;
 }
 
 export interface SmartPlugUpdate {
@@ -395,6 +418,14 @@ export interface SmartPlugUpdate {
   off_temp_threshold?: number;
   username?: string | null;
   password?: string | null;
+  // Power alerts
+  power_alert_enabled?: boolean;
+  power_alert_high?: number | null;
+  power_alert_low?: number | null;
+  // Schedule
+  schedule_enabled?: boolean;
+  schedule_on_time?: string | null;
+  schedule_off_time?: string | null;
 }
 
 export interface SmartPlugEnergy {
@@ -552,7 +583,7 @@ export interface Filament {
 }
 
 // Notification Provider types
-export type ProviderType = 'callmebot' | 'ntfy' | 'pushover' | 'telegram' | 'email';
+export type ProviderType = 'callmebot' | 'ntfy' | 'pushover' | 'telegram' | 'email' | 'discord' | 'webhook';
 
 export interface NotificationProvider {
   id: number;
@@ -575,6 +606,9 @@ export interface NotificationProvider {
   quiet_hours_enabled: boolean;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
+  // Daily digest
+  daily_digest_enabled: boolean;
+  daily_digest_time: string | null;
   // Printer filter
   printer_id: number | null;
   // Status tracking
@@ -606,6 +640,9 @@ export interface NotificationProviderCreate {
   quiet_hours_enabled?: boolean;
   quiet_hours_start?: string | null;
   quiet_hours_end?: string | null;
+  // Daily digest
+  daily_digest_enabled?: boolean;
+  daily_digest_time?: string | null;
   // Printer filter
   printer_id?: number | null;
 }
@@ -630,6 +667,9 @@ export interface NotificationProviderUpdate {
   quiet_hours_enabled?: boolean;
   quiet_hours_start?: string | null;
   quiet_hours_end?: string | null;
+  // Daily digest
+  daily_digest_enabled?: boolean;
+  daily_digest_time?: string | null;
   // Printer filter
   printer_id?: number | null;
 }
@@ -709,6 +749,30 @@ export interface TemplatePreviewRequest {
 export interface TemplatePreviewResponse {
   title: string;
   body: string;
+}
+
+// Notification Log types
+export interface NotificationLogEntry {
+  id: number;
+  provider_id: number;
+  provider_name: string | null;
+  provider_type: string | null;
+  event_type: string;
+  title: string;
+  message: string;
+  success: boolean;
+  error_message: string | null;
+  printer_id: number | null;
+  printer_name: string | null;
+  created_at: string;
+}
+
+export interface NotificationLogStats {
+  total: number;
+  success_count: number;
+  failure_count: number;
+  by_event_type: Record<string, number>;
+  by_provider: Record<string, number>;
 }
 
 // Spoolman types
@@ -1085,6 +1149,23 @@ export const api = {
     }),
   resetSettings: () =>
     request<AppSettings>('/settings/reset', { method: 'POST' }),
+  exportBackup: async () => {
+    const response = await fetch(`${API_BASE}/settings/backup`);
+    return response.json();
+  },
+  importBackup: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/settings/restore`, {
+      method: 'POST',
+      body: formData,
+    });
+    return response.json() as Promise<{
+      success: boolean;
+      message: string;
+      restored?: { settings: number; notification_providers: number; smart_plugs: number };
+    }>;
+  },
   checkFfmpeg: () =>
     request<{ installed: boolean; path: string | null }>('/settings/check-ffmpeg'),
 
@@ -1263,6 +1344,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  testAllNotificationProviders: () =>
+    request<{
+      tested: number;
+      success: number;
+      failed: number;
+      results: Array<{
+        provider_id: number;
+        provider_name: string;
+        provider_type: string;
+        success: boolean;
+        message: string;
+      }>;
+    }>('/notifications/test-all', { method: 'POST' }),
 
   // Notification Templates
   getNotificationTemplates: () => request<NotificationTemplate[]>('/notification-templates'),
@@ -1282,6 +1376,32 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // Notification Logs
+  getNotificationLogs: (params?: {
+    limit?: number;
+    offset?: number;
+    provider_id?: number;
+    event_type?: string;
+    success?: boolean;
+    days?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.offset) searchParams.set('offset', String(params.offset));
+    if (params?.provider_id) searchParams.set('provider_id', String(params.provider_id));
+    if (params?.event_type) searchParams.set('event_type', params.event_type);
+    if (params?.success !== undefined) searchParams.set('success', String(params.success));
+    if (params?.days) searchParams.set('days', String(params.days));
+    return request<NotificationLogEntry[]>(`/notifications/logs?${searchParams}`);
+  },
+  getNotificationLogStats: (days = 7) =>
+    request<NotificationLogStats>(`/notifications/logs/stats?days=${days}`),
+  clearNotificationLogs: (olderThanDays = 30) =>
+    request<{ deleted: number; message: string }>(
+      `/notifications/logs?older_than_days=${olderThanDays}`,
+      { method: 'DELETE' }
+    ),
 
   // Spoolman Integration
   getSpoolmanStatus: () => request<SpoolmanStatus>('/spoolman/status'),

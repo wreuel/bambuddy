@@ -993,10 +993,18 @@ async def lifespan(app: FastAPI):
     # Start the print scheduler
     asyncio.create_task(print_scheduler.run())
 
+    # Start the smart plug scheduler for time-based on/off
+    smart_plug_manager.start_scheduler()
+
+    # Start the notification digest scheduler
+    notification_service.start_digest_scheduler()
+
     yield
 
     # Shutdown
     print_scheduler.stop()
+    smart_plug_manager.stop_scheduler()
+    notification_service.stop_digest_scheduler()
     printer_manager.disconnect_all()
     await close_spoolman_client()
 

@@ -131,6 +131,66 @@ async def run_migrations(conn):
         # Column already exists
         pass
 
+    # Migration: Add power alert columns to smart_plugs
+    try:
+        await conn.execute(text(
+            "ALTER TABLE smart_plugs ADD COLUMN power_alert_enabled BOOLEAN DEFAULT 0"
+        ))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text(
+            "ALTER TABLE smart_plugs ADD COLUMN power_alert_high REAL"
+        ))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text(
+            "ALTER TABLE smart_plugs ADD COLUMN power_alert_low REAL"
+        ))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text(
+            "ALTER TABLE smart_plugs ADD COLUMN power_alert_last_triggered DATETIME"
+        ))
+    except Exception:
+        pass
+
+    # Migration: Add schedule columns to smart_plugs
+    try:
+        await conn.execute(text(
+            "ALTER TABLE smart_plugs ADD COLUMN schedule_enabled BOOLEAN DEFAULT 0"
+        ))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text(
+            "ALTER TABLE smart_plugs ADD COLUMN schedule_on_time VARCHAR(5)"
+        ))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text(
+            "ALTER TABLE smart_plugs ADD COLUMN schedule_off_time VARCHAR(5)"
+        ))
+    except Exception:
+        pass
+
+    # Migration: Add daily digest columns to notification_providers
+    try:
+        await conn.execute(text(
+            "ALTER TABLE notification_providers ADD COLUMN daily_digest_enabled BOOLEAN DEFAULT 0"
+        ))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text(
+            "ALTER TABLE notification_providers ADD COLUMN daily_digest_time VARCHAR(5)"
+        ))
+    except Exception:
+        pass
+
 
 async def seed_notification_templates():
     """Seed default notification templates if they don't exist."""
