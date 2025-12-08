@@ -283,6 +283,39 @@ export interface SlicerSettingsResponse {
   process: SlicerSetting[];
 }
 
+export interface SlicerSettingDetail {
+  message?: string | null;
+  code?: string | null;
+  error?: string | null;
+  public: boolean;
+  version?: string | null;
+  type: string;
+  name: string;
+  update_time?: string | null;
+  nickname?: string | null;
+  base_id?: string | null;
+  setting: Record<string, unknown>;
+  filament_id?: string | null;
+  setting_id?: string | null;
+}
+
+export interface SlicerSettingCreate {
+  type: string;  // 'filament', 'print', or 'printer'
+  name: string;
+  base_id: string;
+  setting: Record<string, unknown>;
+}
+
+export interface SlicerSettingUpdate {
+  name?: string;
+  setting?: Record<string, unknown>;
+}
+
+export interface SlicerSettingDeleteResponse {
+  success: boolean;
+  message: string;
+}
+
 export interface CloudDevice {
   dev_id: string;
   name: string;
@@ -382,6 +415,7 @@ export interface PrintQueueItem {
   archive_name?: string | null;
   archive_thumbnail?: string | null;
   printer_name?: string | null;
+  print_time_seconds?: number | null;  // Estimated print time from archive
 }
 
 export interface PrintQueueItemCreate {
@@ -454,6 +488,15 @@ export interface KProfileDelete {
 export interface KProfilesResponse {
   profiles: KProfile[];
   nozzle_diameter: string;
+}
+
+export interface KProfileNote {
+  setting_id: string;
+  note: string;
+}
+
+export interface KProfileNotesResponse {
+  notes: Record<string, string>;  // setting_id -> note
 }
 
 // Slot Preset Mapping
@@ -1004,7 +1047,21 @@ export const api = {
   getCloudSettings: (version = '01.09.00.00') =>
     request<SlicerSettingsResponse>(`/cloud/settings?version=${version}`),
   getCloudSettingDetail: (settingId: string) =>
-    request<Record<string, unknown>>(`/cloud/settings/${settingId}`),
+    request<SlicerSettingDetail>(`/cloud/settings/${settingId}`),
+  createCloudSetting: (data: SlicerSettingCreate) =>
+    request<SlicerSettingDetail>('/cloud/settings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateCloudSetting: (settingId: string, data: SlicerSettingUpdate) =>
+    request<SlicerSettingDetail>(`/cloud/settings/${settingId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteCloudSetting: (settingId: string) =>
+    request<SlicerSettingDeleteResponse>(`/cloud/settings/${settingId}`, {
+      method: 'DELETE',
+    }),
   getCloudDevices: () => request<CloudDevice[]>('/cloud/devices'),
 
   // Smart Plugs
@@ -1078,6 +1135,24 @@ export const api = {
     request<{ success: boolean; message: string }>(`/printers/${printerId}/kprofiles/`, {
       method: 'DELETE',
       body: JSON.stringify(profile),
+    }),
+  setKProfilesBatch: (printerId: number, profiles: KProfileCreate[]) =>
+    request<{ success: boolean; message: string }>(`/printers/${printerId}/kprofiles/batch`, {
+      method: 'POST',
+      body: JSON.stringify(profiles),
+    }),
+
+  // K-Profile Notes (stored locally, not on printer)
+  getKProfileNotes: (printerId: number) =>
+    request<KProfileNotesResponse>(`/printers/${printerId}/kprofiles/notes`),
+  setKProfileNote: (printerId: number, settingId: string, note: string) =>
+    request<{ success: boolean; message: string }>(`/printers/${printerId}/kprofiles/notes`, {
+      method: 'PUT',
+      body: JSON.stringify({ setting_id: settingId, note }),
+    }),
+  deleteKProfileNote: (printerId: number, settingId: string) =>
+    request<{ success: boolean; message: string }>(`/printers/${printerId}/kprofiles/notes/${encodeURIComponent(settingId)}`, {
+      method: 'DELETE',
     }),
 
   // Slot Preset Mappings

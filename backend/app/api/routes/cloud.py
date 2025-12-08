@@ -24,6 +24,9 @@ from backend.app.schemas.cloud import (
     SlicerSettingsResponse,
     SlicerSetting,
     CloudDevice,
+    SlicerSettingCreate,
+    SlicerSettingUpdate,
+    SlicerSettingDeleteResponse,
 )
 
 router = APIRouter(prefix="/cloud", tags=["cloud"])
@@ -282,6 +285,107 @@ async def get_devices(db: AsyncSession = Depends(get_db)):
             )
             for d in devices
         ]
+    except BambuCloudAuthError:
+        await clear_token(db)
+        raise HTTPException(status_code=401, detail="Authentication expired")
+    except BambuCloudError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/settings")
+async def create_setting(request: SlicerSettingCreate, db: AsyncSession = Depends(get_db)):
+    """
+    Create a new slicer preset/setting.
+
+    Creates a new preset on Bambu Cloud. The preset inherits from a base preset
+    and only stores the delta (modified values).
+
+    Type should be: 'filament', 'print', or 'printer'
+    """
+    token, _ = await get_stored_token(db)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    cloud = get_cloud_service()
+    cloud.set_token(token)
+
+    if not cloud.is_authenticated:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        data = await cloud.create_setting(
+            preset_type=request.type,
+            name=request.name,
+            base_id=request.base_id,
+            setting=request.setting,
+            version=request.version,
+        )
+        return data
+    except BambuCloudAuthError:
+        await clear_token(db)
+        raise HTTPException(status_code=401, detail="Authentication expired")
+    except BambuCloudError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/settings/{setting_id}")
+async def update_setting(
+    setting_id: str,
+    request: SlicerSettingUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update an existing slicer preset/setting.
+
+    Updates the preset's name and/or settings on Bambu Cloud.
+    """
+    token, _ = await get_stored_token(db)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    cloud = get_cloud_service()
+    cloud.set_token(token)
+
+    if not cloud.is_authenticated:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        data = await cloud.update_setting(
+            setting_id=setting_id,
+            name=request.name,
+            setting=request.setting,
+        )
+        return data
+    except BambuCloudAuthError:
+        await clear_token(db)
+        raise HTTPException(status_code=401, detail="Authentication expired")
+    except BambuCloudError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/settings/{setting_id}", response_model=SlicerSettingDeleteResponse)
+async def delete_setting(setting_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Delete a slicer preset/setting.
+
+    Removes the preset from Bambu Cloud. This cannot be undone.
+    """
+    token, _ = await get_stored_token(db)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    cloud = get_cloud_service()
+    cloud.set_token(token)
+
+    if not cloud.is_authenticated:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        result = await cloud.delete_setting(setting_id)
+        return SlicerSettingDeleteResponse(
+            success=result.get("success", True),
+            message=result.get("message", "Setting deleted"),
+        )
     except BambuCloudAuthError:
         await clear_token(db)
         raise HTTPException(status_code=401, detail="Authentication expired")

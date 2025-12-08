@@ -1,3 +1,12 @@
+"""Bambu Lab MQTT communication service.
+
+IMPORTANT: Always use qos=1 for all MQTT publish calls!
+The printer ignores qos=0 messages when busy broadcasting status updates.
+Using qos=1 ensures the printer acknowledges and processes our commands immediately.
+This was discovered when K-profile requests with qos=0 took 20-30 seconds,
+but with qos=1 they respond instantly.
+"""
+
 import json
 import ssl
 import asyncio
@@ -1411,7 +1420,7 @@ class BambuMQTTClient:
         """Request full status update from printer."""
         if self._client:
             message = {"pushing": {"command": "pushall"}}
-            self._client.publish(self.topic_publish, json.dumps(message))
+            self._client.publish(self.topic_publish, json.dumps(message), qos=1)
 
     def request_status_update(self) -> bool:
         """Request a full status update from the printer (public API).
@@ -1441,7 +1450,7 @@ class BambuMQTTClient:
                 }
             }
             logger.debug(f"[{self.serial_number}] Requesting accessories info")
-            self._client.publish(self.topic_publish, json.dumps(message))
+            self._client.publish(self.topic_publish, json.dumps(message), qos=1)
 
     def _prime_kprofile_request(self):
         """Send a priming K-profile request on connect.
@@ -1460,7 +1469,7 @@ class BambuMQTTClient:
                 }
             }
             logger.debug(f"[{self.serial_number}] Sending K-profile priming request")
-            self._client.publish(self.topic_publish, json.dumps(command))
+            self._client.publish(self.topic_publish, json.dumps(command), qos=1)
 
     def connect(self, loop: asyncio.AbstractEventLoop | None = None):
         """Connect to the printer MQTT broker.
@@ -1516,7 +1525,7 @@ class BambuMQTTClient:
                 }
             }
             logger.info(f"[{self.serial_number}] Sending print command: {json.dumps(command)}")
-            self._client.publish(self.topic_publish, json.dumps(command))
+            self._client.publish(self.topic_publish, json.dumps(command), qos=1)
             return True
         return False
 
@@ -1529,7 +1538,7 @@ class BambuMQTTClient:
                     "sequence_id": "0"
                 }
             }
-            self._client.publish(self.topic_publish, json.dumps(command))
+            self._client.publish(self.topic_publish, json.dumps(command), qos=1)
             logger.info(f"[{self.serial_number}] Sent stop print command")
             return True
         return False
@@ -1763,7 +1772,7 @@ class BambuMQTTClient:
                     direction="out",
                     payload=command,
                 ))
-            self._client.publish(self.topic_publish, json.dumps(command))
+            self._client.publish(self.topic_publish, json.dumps(command), qos=1)
 
     def enable_logging(self, enabled: bool = True):
         """Enable or disable MQTT message logging."""
@@ -1785,13 +1794,50 @@ class BambuMQTTClient:
 
     def _handle_kprofile_response(self, data: dict):
         """Handle K-profile response from printer."""
+        response_nozzle = data.get("nozzle_diameter")
+        response_seq_id = data.get("sequence_id", "?")
         filaments = data.get("filaments", [])
-        profiles = []
+        expected_nozzle = getattr(self, '_expected_kprofile_nozzle', None)
+        has_pending_request = self._pending_kprofile_response is not None
 
-        # Log first profile to see what fields the printer returns
-        if filaments and isinstance(filaments[0], dict):
-            logger.debug(f"[{self.serial_number}] Raw K-profile fields: {list(filaments[0].keys())}")
-            logger.debug(f"[{self.serial_number}] First K-profile: {filaments[0]}")
+        # Log all incoming responses when we have a pending request (for debugging)
+        if has_pending_request:
+            logger.info(f"[{self.serial_number}] K-profile response: nozzle={response_nozzle}, {len(filaments)} profiles, expected={expected_nozzle}")
+
+        # If we have a pending request, only accept responses with matching nozzle_diameter
+        # The printer broadcasts 0.4mm profiles constantly - we need to wait for the actual response
+        if has_pending_request and expected_nozzle and response_nozzle != expected_nozzle:
+            # Ignore this broadcast, keep waiting for matching response
+            logger.debug(f"[{self.serial_number}] Ignoring broadcast: got nozzle={response_nozzle}, waiting for {expected_nozzle}")
+            return
+
+        # If no pending request, this is just a broadcast - update state silently and return early
+        if not has_pending_request:
+            # Still parse profiles to keep state updated, but don't log
+            profiles = []
+            for f in filaments:
+                if isinstance(f, dict):
+                    try:
+                        cali_idx = f.get("cali_idx", 0)
+                        profiles.append(KProfile(
+                            slot_id=cali_idx,
+                            extruder_id=int(f.get("extruder_id", 0)),
+                            nozzle_id=str(f.get("nozzle_id", "")),
+                            nozzle_diameter=str(f.get("nozzle_diameter", "0.4")),
+                            filament_id=str(f.get("filament_id", "")),
+                            name=str(f.get("name", "")),
+                            k_value=str(f.get("k_value", "0.000000")),
+                            n_coef=str(f.get("n_coef", "0.000000")),
+                            ams_id=int(f.get("ams_id", 0)),
+                            tray_id=int(f.get("tray_id", -1)),
+                            setting_id=f.get("setting_id"),
+                        ))
+                    except (ValueError, TypeError):
+                        pass
+            self.state.kprofiles = profiles
+            return
+
+        profiles = []
 
         for i, f in enumerate(filaments):
             if isinstance(f, dict):
@@ -1817,16 +1863,15 @@ class BambuMQTTClient:
         self.state.kprofiles = profiles
         self._kprofile_response_data = profiles
 
-        # Signal that we received the response
+        # Signal that we received the response (only if we were waiting for one)
         # Use thread-safe method since MQTT callbacks run in a different thread
         if self._pending_kprofile_response:
+            logger.info(f"[{self.serial_number}] Got {len(profiles)} K-profiles for nozzle={response_nozzle}")
             if self._loop and self._loop.is_running():
                 self._loop.call_soon_threadsafe(self._pending_kprofile_response.set)
             else:
                 # Fallback for when loop is not available
                 self._pending_kprofile_response.set()
-
-        logger.info(f"[{self.serial_number}] Received {len(profiles)} K-profiles")
 
     async def get_kprofiles(self, nozzle_diameter: str = "0.4", timeout: float = 5.0, max_retries: int = 3) -> list[KProfile]:
         """Request K-profiles from the printer with retry logic.
@@ -1858,8 +1903,9 @@ class BambuMQTTClient:
             self._sequence_id += 1
             self._pending_kprofile_response = asyncio.Event()
             self._kprofile_response_data = None
+            self._expected_kprofile_nozzle = nozzle_diameter  # Track which nozzle response we expect
 
-            # Send the command
+            # Send the command with nozzle_diameter filter
             command = {
                 "print": {
                     "command": "extrusion_cali_get",
@@ -1869,14 +1915,15 @@ class BambuMQTTClient:
                 }
             }
 
-            logger.info(f"[{self.serial_number}] Requesting K-profiles for nozzle {nozzle_diameter} (attempt {attempt + 1}/{max_retries})")
-            self._client.publish(self.topic_publish, json.dumps(command))
+            logger.info(f"[{self.serial_number}] Requesting K-profiles for nozzle_diameter={nozzle_diameter} (attempt {attempt + 1}/{max_retries})")
+            logger.debug(f"[{self.serial_number}] K-profile request JSON: {json.dumps(command)}")
+            self._client.publish(self.topic_publish, json.dumps(command), qos=1)
 
-            # Wait for response
+            # Wait for response (response handler already filters by nozzle_diameter)
             try:
                 await asyncio.wait_for(self._pending_kprofile_response.wait(), timeout=timeout)
                 profiles = self._kprofile_response_data or []
-                logger.info(f"[{self.serial_number}] Got {len(profiles)} K-profiles on attempt {attempt + 1}")
+                logger.info(f"[{self.serial_number}] Got {len(profiles)} K-profiles for nozzle={nozzle_diameter} on attempt {attempt + 1}")
                 return profiles
             except asyncio.TimeoutError:
                 logger.warning(f"[{self.serial_number}] Timeout on K-profiles request attempt {attempt + 1}/{max_retries}")
@@ -1885,6 +1932,7 @@ class BambuMQTTClient:
                     await asyncio.sleep(0.5)
             finally:
                 self._pending_kprofile_response = None
+                self._expected_kprofile_nozzle = None
 
         logger.error(f"[{self.serial_number}] Failed to get K-profiles after {max_retries} attempts")
         return []
@@ -1912,7 +1960,7 @@ class BambuMQTTClient:
             extruder_id: Extruder ID (0 or 1 for dual nozzle)
             setting_id: Existing setting ID for updates, None for new
             slot_id: Calibration index (cali_idx) for the profile
-            cali_idx: For H2D edits, the existing slot being edited (enables in-place edit)
+            cali_idx: For edits, the existing slot being edited (enables in-place edit)
 
         Returns:
             True if command was sent, False otherwise
@@ -1923,95 +1971,111 @@ class BambuMQTTClient:
 
         self._sequence_id += 1
 
-        # Detect printer type by serial number prefix
-        # X1C/P1/A1 series (single nozzle): serial starts with "00M", "00W", "01P", "01S", "03W", etc.
-        # H2D series (dual nozzle): serial starts with "094"
-        is_dual_nozzle = self.serial_number.startswith("094")
-
-        # For H2D edits, use empty setting_id per OrcaSlicer sniff
-        # For new profiles, generate a setting_id
-        import secrets
+        # Build the filament entry - printer uses cali_idx for profile identification
+        # For new profiles (slot_id=0), use cali_idx=-1 to tell printer to create new slot
+        # For edits, use the provided cali_idx or slot_id
         if cali_idx is not None:
-            # Edit mode - use empty setting_id per OrcaSlicer sniff
-            setting_id = ""
-        elif not setting_id and slot_id == 0:
-            # New profile - generate setting_id
-            setting_id = f"PFUS{secrets.token_hex(7)}"  # 7 bytes = 14 hex chars
-
-        if is_dual_nozzle:
-            # H2D format - exact OrcaSlicer format (captured via MQTT sniffing)
-            # For edits: include cali_idx (existing slot), slot_id=0, setting_id=""
-            # For new profiles: no cali_idx, slot_id=0, setting_id=generated
-            filament_entry = {
-                "ams_id": 0,
-                "extruder_id": extruder_id,
-                "filament_id": filament_id,
-                "k_value": k_value,
-                "n_coef": "0.000000",
-                "name": name,
-                "nozzle_diameter": nozzle_diameter,
-                "nozzle_id": nozzle_id,
-                "setting_id": setting_id if setting_id else "",
-                "slot_id": slot_id,
-                "tray_id": -1,
-            }
-            # For edits, add cali_idx field (position matters - alphabetical order)
-            if cali_idx is not None:
-                # Insert cali_idx in alphabetical position (after ams_id, before extruder_id)
-                # n_coef must be "0.000000" for H2D edits (matches OrcaSlicer sniff)
-                filament_entry = {
-                    "ams_id": 0,
-                    "cali_idx": cali_idx,
-                    "extruder_id": extruder_id,
-                    "filament_id": filament_id,
-                    "k_value": k_value,
-                    "n_coef": "0.000000",
-                    "name": name,
-                    "nozzle_diameter": nozzle_diameter,
-                    "nozzle_id": nozzle_id,
-                    "setting_id": "",
-                    "slot_id": 0,
-                    "tray_id": -1,
-                }
-            command = {
-                "print": {
-                    "command": "extrusion_cali_set",
-                    "filaments": [filament_entry],
-                    "nozzle_diameter": nozzle_diameter,
-                    "sequence_id": str(self._sequence_id),
-                }
-            }
+            effective_cali_idx = cali_idx
         else:
-            # X1C/P1/A1 format - based on actual X1C profile data:
-            # - n_coef: "1.000000" (NOT 0.000000 like H2D)
-            # - nozzle_id: "" (empty string, NOT the nozzle type)
-            # - tray_id: -1 (NOT 0)
-            filament_entry = {
-                "ams_id": 0,
-                "extruder_id": 0,  # X1C is single nozzle
-                "filament_id": filament_id,
-                "k_value": k_value,
-                "n_coef": "1.000000",  # X1C uses 1.0, not 0.0
-                "name": name,
+            effective_cali_idx = -1 if slot_id == 0 else slot_id
+
+        # Generate a setting_id for new profiles (required by printer)
+        # Format: "PF" + 17 random digits
+        import random
+        if not setting_id and slot_id == 0:
+            setting_id = f"PF{random.randint(10000000000000000, 99999999999999999)}"
+
+        filament_entry = {
+            "ams_id": 0,
+            "cali_idx": effective_cali_idx,
+            "extruder_id": extruder_id,
+            "filament_id": filament_id,
+            "k_value": k_value,
+            "n_coef": "0.000000",
+            "name": name,
+            "nozzle_diameter": nozzle_diameter,
+            "nozzle_id": nozzle_id,
+            "setting_id": setting_id if setting_id else "",
+            "tray_id": -1,
+        }
+
+        command = {
+            "print": {
+                "command": "extrusion_cali_set",
+                "filaments": [filament_entry],
                 "nozzle_diameter": nozzle_diameter,
-                "nozzle_id": "",  # X1C uses empty string
-                "setting_id": setting_id,
-                "slot_id": slot_id,
-                "tray_id": -1,  # X1C uses -1
+                "sequence_id": str(self._sequence_id),
             }
-            command = {
-                "print": {
-                    "command": "extrusion_cali_set",
-                    "filaments": [filament_entry],
-                    "nozzle_diameter": nozzle_diameter,
-                    "sequence_id": str(self._sequence_id),
-                }
-            }
+        }
 
         command_json = json.dumps(command)
-        logger.info(f"[{self.serial_number}] Setting K-profile: {name} = {k_value} (cali_idx={cali_idx}, new={slot_id==0}, dual={is_dual_nozzle})")
+        logger.info(f"[{self.serial_number}] Setting K-profile: {name} = {k_value} (cali_idx={effective_cali_idx}, new={slot_id==0})")
         logger.info(f"[{self.serial_number}] K-profile SET command: {command_json}")
-        # Use QoS 1 for reliable delivery (at least once)
+        self._client.publish(self.topic_publish, command_json, qos=1)
+        return True
+
+    def set_kprofiles_batch(
+        self,
+        profiles: list[dict],
+        nozzle_diameter: str = "0.4",
+    ) -> bool:
+        """Set multiple K-profiles in a single command (for dual-nozzle).
+
+        Args:
+            profiles: List of profile dicts, each with:
+                - filament_id, name, k_value, nozzle_id, extruder_id, setting_id (optional), slot_id
+            nozzle_diameter: Common nozzle diameter for all profiles
+
+        Returns:
+            True if command was sent, False otherwise
+        """
+        if not self._client or not self.state.connected:
+            logger.warning(f"[{self.serial_number}] Cannot set K-profiles batch: not connected")
+            return False
+
+        import random
+        self._sequence_id += 1
+
+        filament_entries = []
+        for p in profiles:
+            slot_id = p.get("slot_id", 0)
+            cali_idx = p.get("cali_idx")
+
+            if cali_idx is not None:
+                effective_cali_idx = cali_idx
+            else:
+                effective_cali_idx = -1 if slot_id == 0 else slot_id
+
+            setting_id = p.get("setting_id")
+            if not setting_id and slot_id == 0:
+                setting_id = f"PF{random.randint(10000000000000000, 99999999999999999)}"
+
+            filament_entries.append({
+                "ams_id": 0,
+                "cali_idx": effective_cali_idx,
+                "extruder_id": p.get("extruder_id", 0),
+                "filament_id": p.get("filament_id", ""),
+                "k_value": p.get("k_value", "0.020000"),
+                "n_coef": "0.000000",
+                "name": p.get("name", ""),
+                "nozzle_diameter": nozzle_diameter,
+                "nozzle_id": p.get("nozzle_id", f"HS00-{nozzle_diameter}"),
+                "setting_id": setting_id if setting_id else "",
+                "tray_id": -1,
+            })
+
+        command = {
+            "print": {
+                "command": "extrusion_cali_set",
+                "filaments": filament_entries,
+                "nozzle_diameter": nozzle_diameter,
+                "sequence_id": str(self._sequence_id),
+            }
+        }
+
+        command_json = json.dumps(command)
+        logger.info(f"[{self.serial_number}] Setting {len(filament_entries)} K-profiles in batch")
+        logger.info(f"[{self.serial_number}] K-profile SET batch command: {command_json}")
         self._client.publish(self.topic_publish, command_json, qos=1)
         return True
 
@@ -2061,20 +2125,23 @@ class BambuMQTTClient:
                 }
             }
         else:
-            # X1C/P1/A1 format: uses setting_id, nozzle_diameter, no extruder/nozzle_id fields
+            # X1C/P1/A1 format: include all fields like the set command
+            # The delete command structure should match what set uses
             command = {
                 "print": {
                     "command": "extrusion_cali_del",
                     "sequence_id": str(self._sequence_id),
                     "filament_id": filament_id,
                     "cali_idx": cali_idx,
-                    "setting_id": setting_id,
+                    "setting_id": setting_id if setting_id else "",
                     "nozzle_diameter": nozzle_diameter,
+                    "nozzle_id": nozzle_id,
+                    "extruder_id": extruder_id,
                 }
             }
 
         command_json = json.dumps(command)
-        logger.info(f"[{self.serial_number}] Deleting K-profile: cali_idx={cali_idx}, filament={filament_id}, dual={is_dual_nozzle}")
+        logger.info(f"[{self.serial_number}] Deleting K-profile: cali_idx={cali_idx}, filament={filament_id}, setting_id={setting_id}, dual={is_dual_nozzle}")
         logger.info(f"[{self.serial_number}] K-profile DELETE command: {command_json}")
         # Use QoS 1 for reliable delivery (at least once)
         self._client.publish(self.topic_publish, command_json, qos=1)
@@ -2221,7 +2288,7 @@ class BambuMQTTClient:
                 "sequence_id": "0"
             }
         }
-        self._client.publish(self.topic_publish, json.dumps(command))
+        self._client.publish(self.topic_publish, json.dumps(command), qos=1)
         logger.info(f"[{self.serial_number}] Set print speed mode to {mode}")
         return True
 
@@ -2443,7 +2510,7 @@ class BambuMQTTClient:
 
         command_json = json.dumps(command)
         logger.info(f"[{self.serial_number}] Publishing ams_change_filament command: {command_json}")
-        self._client.publish(self.topic_publish, command_json)
+        self._client.publish(self.topic_publish, command_json, qos=1)
         logger.info(f"[{self.serial_number}] Loading filament from tray {tray_id} (AMS {ams_id} slot {slot_id})")
 
         # Track this load request for H2D dual-nozzle disambiguation
@@ -2498,7 +2565,7 @@ class BambuMQTTClient:
 
         command_json = json.dumps(command)
         logger.info(f"[{self.serial_number}] Publishing ams_change_filament (unload) command: {command_json}")
-        self._client.publish(self.topic_publish, command_json)
+        self._client.publish(self.topic_publish, command_json, qos=1)
         logger.info(f"[{self.serial_number}] Unloading filament (tray_now was {tray_now})")
 
         # Clear tracked load request since we're unloading
@@ -2532,7 +2599,7 @@ class BambuMQTTClient:
                 "sequence_id": "0"
             }
         }
-        self._client.publish(self.topic_publish, json.dumps(command))
+        self._client.publish(self.topic_publish, json.dumps(command), qos=1)
         logger.info(f"[{self.serial_number}] AMS control: {action}")
         return True
 
@@ -2576,7 +2643,7 @@ class BambuMQTTClient:
                 "sequence_id": "0"
             }
         }
-        self._client.publish(self.topic_publish, json.dumps(command))
+        self._client.publish(self.topic_publish, json.dumps(command), qos=1)
         logger.info(f"[{self.serial_number}] Triggering RFID re-read: AMS {ams_id}, slot {tray_id}")
         return True, f"Refreshing AMS {ams_id} tray {tray_id}"
 
@@ -2631,7 +2698,7 @@ class BambuMQTTClient:
         command_json = json.dumps(command)
         logger.info(f"[{self.serial_number}] Publishing ams_filament_setting: AMS {ams_id}, tray {tray_id}, k={k}")
         logger.debug(f"[{self.serial_number}] ams_filament_setting command: {command_json}")
-        self._client.publish(self.topic_publish, command_json)
+        self._client.publish(self.topic_publish, command_json, qos=1)
         return True
 
     def set_timelapse(self, enable: bool) -> bool:
@@ -2661,9 +2728,9 @@ class BambuMQTTClient:
                 "sequence_id": "0"
             }
         }
-        self._client.publish(self.topic_publish, json.dumps(timelapse_cmd))
+        self._client.publish(self.topic_publish, json.dumps(timelapse_cmd), qos=1)
         # Request status update
-        self._client.publish(self.topic_publish, json.dumps(command))
+        self._client.publish(self.topic_publish, json.dumps(command), qos=1)
         logger.info(f"[{self.serial_number}] Set timelapse {'enabled' if enable else 'disabled'}")
         return True
 
@@ -2687,7 +2754,7 @@ class BambuMQTTClient:
                 "sequence_id": "0"
             }
         }
-        self._client.publish(self.topic_publish, json.dumps(command))
+        self._client.publish(self.topic_publish, json.dumps(command), qos=1)
         # Request status update
         pushall = {
             "pushing": {
@@ -2695,6 +2762,6 @@ class BambuMQTTClient:
                 "sequence_id": "0"
             }
         }
-        self._client.publish(self.topic_publish, json.dumps(pushall))
+        self._client.publish(self.topic_publish, json.dumps(pushall), qos=1)
         logger.info(f"[{self.serial_number}] Set liveview {'enabled' if enable else 'disabled'}")
         return True
