@@ -15,6 +15,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { BackupModal } from '../components/BackupModal';
 import { RestoreModal } from '../components/RestoreModal';
 import { SpoolmanSettings } from '../components/SpoolmanSettings';
+import { ExternalLinksSettings } from '../components/ExternalLinksSettings';
 import { defaultNavItems, getDefaultView, setDefaultView } from '../components/Layout';
 import { availableLanguages } from '../i18n';
 import { useToast } from '../contexts/ToastContext';
@@ -734,6 +735,8 @@ export function SettingsPage() {
           </Card>
 
           <SpoolmanSettings />
+
+          <ExternalLinksSettings />
         </div>
 
         {/* Third Column - Updates */}

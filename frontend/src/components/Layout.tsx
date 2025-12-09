@@ -6,6 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { getIconByName } from './IconPicker';
 
 interface NavItem {
   id: string;
@@ -24,36 +25,27 @@ export const defaultNavItems: NavItem[] = [
   { id: 'settings', to: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ];
 
-// Get ordered nav items from localStorage
-function getOrderedNavItems(): NavItem[] {
+// Get unified sidebar order from localStorage
+function getSidebarOrder(): string[] {
   const stored = localStorage.getItem('sidebarOrder');
   if (stored) {
     try {
-      const order: string[] = JSON.parse(stored);
-      const itemMap = new Map(defaultNavItems.map(item => [item.id, item]));
-      const ordered: NavItem[] = [];
-      for (const id of order) {
-        const item = itemMap.get(id);
-        if (item) {
-          ordered.push(item);
-          itemMap.delete(id);
-        }
-      }
-      // Add any new items that weren't in the stored order
-      for (const item of itemMap.values()) {
-        ordered.push(item);
-      }
-      return ordered;
+      return JSON.parse(stored);
     } catch {
-      return defaultNavItems;
+      return defaultNavItems.map(i => i.id);
     }
   }
-  return defaultNavItems;
+  return defaultNavItems.map(i => i.id);
 }
 
-// Save nav item order to localStorage
-function saveNavOrder(items: NavItem[]) {
-  localStorage.setItem('sidebarOrder', JSON.stringify(items.map(i => i.id)));
+// Save unified sidebar order to localStorage
+function saveSidebarOrder(order: string[]) {
+  localStorage.setItem('sidebarOrder', JSON.stringify(order));
+}
+
+// Check if an ID is an external link
+function isExternalLinkId(id: string): boolean {
+  return id.startsWith('ext-');
 }
 
 // Get default view from localStorage
@@ -76,9 +68,9 @@ export function Layout() {
     return stored !== 'false';
   });
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const [navItems, setNavItems] = useState<NavItem[]>(getOrderedNavItems);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [sidebarOrder, setSidebarOrder] = useState<string[]>(getSidebarOrder);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const hasRedirected = useRef(false);
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(() =>
     sessionStorage.getItem('dismissedUpdateVersion')
@@ -104,6 +96,101 @@ export function Layout() {
     staleTime: 60 * 60 * 1000, // 1 hour
     refetchInterval: 60 * 60 * 1000, // Check every hour
   });
+
+  // Fetch external links for sidebar
+  const { data: externalLinks } = useQuery({
+    queryKey: ['external-links'],
+    queryFn: api.getExternalLinks,
+  });
+
+  // Build the unified sidebar items list
+  const navItemsMap = new Map(defaultNavItems.map(item => [item.id, item]));
+  const extLinksMap = new Map((externalLinks || []).map(link => [`ext-${link.id}`, link]));
+
+  // Compute the ordered sidebar: include stored order + any new items
+  const orderedSidebarIds = (() => {
+    const result: string[] = [];
+    const seen = new Set<string>();
+
+    // Add items in stored order
+    for (const id of sidebarOrder) {
+      if (navItemsMap.has(id) || extLinksMap.has(id)) {
+        result.push(id);
+        seen.add(id);
+      }
+    }
+
+    // Add any new internal nav items not in stored order
+    for (const item of defaultNavItems) {
+      if (!seen.has(item.id)) {
+        result.push(item.id);
+        seen.add(item.id);
+      }
+    }
+
+    // Add any new external links not in stored order
+    for (const link of externalLinks || []) {
+      const extId = `ext-${link.id}`;
+      if (!seen.has(extId)) {
+        result.push(extId);
+        seen.add(extId);
+      }
+    }
+
+    return result;
+  })();
+
+  // Unified drag handlers
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverId(id);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (draggedId === null || draggedId === targetId) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const currentOrder = [...orderedSidebarIds];
+    const draggedIndex = currentOrder.indexOf(draggedId);
+    const targetIndex = currentOrder.indexOf(targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    // Reorder
+    currentOrder.splice(draggedIndex, 1);
+    currentOrder.splice(targetIndex, 0, draggedId);
+
+    // Save to localStorage and update state
+    setSidebarOrder(currentOrder);
+    saveSidebarOrder(currentOrder);
+
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
 
   // Show update banner if update available and not dismissed for this version
   const showUpdateBanner = updateCheck?.update_available &&
@@ -132,46 +219,6 @@ export function Layout() {
     localStorage.setItem('sidebarExpanded', String(sidebarExpanded));
   }, [sidebarExpanded]);
 
-  // Drag and drop handlers
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverIndex(index);
-  };
-
-  const handleDragLeave = () => {
-    setDragOverIndex(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === dropIndex) {
-      setDraggedIndex(null);
-      setDragOverIndex(null);
-      return;
-    }
-
-    const newItems = [...navItems];
-    const [draggedItem] = newItems.splice(draggedIndex, 1);
-    newItems.splice(dropIndex, 0, draggedItem);
-
-    setNavItems(newItems);
-    saveNavOrder(newItems);
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
   // Global keyboard shortcuts for navigation
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
@@ -180,13 +227,17 @@ export function Layout() {
       return;
     }
 
-    // Number keys for navigation (1-6) - follows sidebar order
+    // Number keys for navigation (1-9) - follows sidebar order for internal nav items only
     if (!e.metaKey && !e.ctrlKey && !e.altKey) {
       const keyNum = parseInt(e.key);
-      if (keyNum >= 1 && keyNum <= navItems.length) {
-        e.preventDefault();
-        navigate(navItems[keyNum - 1].to);
-        return;
+      const internalItems = orderedSidebarIds.filter(id => !isExternalLinkId(id));
+      if (keyNum >= 1 && keyNum <= internalItems.length) {
+        const navItem = navItemsMap.get(internalItems[keyNum - 1]);
+        if (navItem) {
+          e.preventDefault();
+          navigate(navItem.to);
+          return;
+        }
       }
 
       switch (e.key) {
@@ -199,7 +250,7 @@ export function Layout() {
           break;
       }
     }
-  }, [navigate, navItems]);
+  }, [navigate, orderedSidebarIds, navItemsMap]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -224,42 +275,103 @@ export function Layout() {
         {/* Navigation */}
         <nav className="flex-1 p-2">
           <ul className="space-y-2">
-            {navItems.map(({ id, to, icon: Icon, labelKey }, index) => (
-              <li
-                key={id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, index)}
-                onDragEnd={handleDragEnd}
-                className={`relative ${
-                  draggedIndex === index ? 'opacity-50' : ''
-                } ${
-                  dragOverIndex === index && draggedIndex !== index
-                    ? 'before:absolute before:left-0 before:right-0 before:top-0 before:h-0.5 before:bg-bambu-green'
-                    : ''
-                }`}
-              >
-                <NavLink
-                  to={to}
-                  className={({ isActive }) =>
-                    `flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-3 rounded-lg transition-colors group ${
-                      isActive
-                        ? 'bg-bambu-green text-white'
-                        : 'text-bambu-gray-light hover:bg-bambu-dark-tertiary hover:text-white'
-                    }`
-                  }
-                  title={!sidebarExpanded ? t(labelKey) : undefined}
-                >
-                  {sidebarExpanded && (
-                    <GripVertical className="w-4 h-4 flex-shrink-0 opacity-0 group-hover:opacity-50 cursor-grab active:cursor-grabbing -ml-1" />
-                  )}
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  {sidebarExpanded && <span>{t(labelKey)}</span>}
-                </NavLink>
-              </li>
-            ))}
+            {orderedSidebarIds.map((id) => {
+              const isExternal = isExternalLinkId(id);
+
+              if (isExternal) {
+                // Render external link
+                const link = extLinksMap.get(id);
+                if (!link) return null;
+
+                const LinkIcon = link.custom_icon ? null : getIconByName(link.icon);
+                return (
+                  <li
+                    key={id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, id)}
+                    onDragOver={(e) => handleDragOver(e, id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, id)}
+                    onDragEnd={handleDragEnd}
+                    className={`relative ${
+                      draggedId === id ? 'opacity-50' : ''
+                    } ${
+                      dragOverId === id && draggedId !== id
+                        ? 'before:absolute before:left-0 before:right-0 before:top-0 before:h-0.5 before:bg-bambu-green'
+                        : ''
+                    }`}
+                  >
+                    <NavLink
+                      to={`/external/${link.id}`}
+                      className={({ isActive }) =>
+                        `flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-3 rounded-lg transition-colors group ${
+                          isActive
+                            ? 'bg-bambu-green text-white'
+                            : 'text-bambu-gray-light hover:bg-bambu-dark-tertiary hover:text-white'
+                        }`
+                      }
+                      title={!sidebarExpanded ? link.name : undefined}
+                    >
+                      {sidebarExpanded && (
+                        <GripVertical className="w-4 h-4 flex-shrink-0 opacity-0 group-hover:opacity-50 cursor-grab active:cursor-grabbing -ml-1" />
+                      )}
+                      {link.custom_icon ? (
+                        <img
+                          src={`/api/v1/external-links/${link.id}/icon`}
+                          alt=""
+                          className={`w-5 h-5 flex-shrink-0 ${theme === 'dark' ? 'invert brightness-200' : ''}`}
+                        />
+                      ) : (
+                        LinkIcon && <LinkIcon className="w-5 h-5 flex-shrink-0" />
+                      )}
+                      {sidebarExpanded && <span>{link.name}</span>}
+                    </NavLink>
+                  </li>
+                );
+              } else {
+                // Render internal nav item
+                const navItem = navItemsMap.get(id);
+                if (!navItem) return null;
+
+                const { to, icon: Icon, labelKey } = navItem;
+                return (
+                  <li
+                    key={id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, id)}
+                    onDragOver={(e) => handleDragOver(e, id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, id)}
+                    onDragEnd={handleDragEnd}
+                    className={`relative ${
+                      draggedId === id ? 'opacity-50' : ''
+                    } ${
+                      dragOverId === id && draggedId !== id
+                        ? 'before:absolute before:left-0 before:right-0 before:top-0 before:h-0.5 before:bg-bambu-green'
+                        : ''
+                    }`}
+                  >
+                    <NavLink
+                      to={to}
+                      className={({ isActive }) =>
+                        `flex items-center ${sidebarExpanded ? 'gap-3 px-4' : 'justify-center px-2'} py-3 rounded-lg transition-colors group ${
+                          isActive
+                            ? 'bg-bambu-green text-white'
+                            : 'text-bambu-gray-light hover:bg-bambu-dark-tertiary hover:text-white'
+                        }`
+                      }
+                      title={!sidebarExpanded ? t(labelKey) : undefined}
+                    >
+                      {sidebarExpanded && (
+                        <GripVertical className="w-4 h-4 flex-shrink-0 opacity-0 group-hover:opacity-50 cursor-grab active:cursor-grabbing -ml-1" />
+                      )}
+                      <Icon className="w-5 h-5 flex-shrink-0" />
+                      {sidebarExpanded && <span>{t(labelKey)}</span>}
+                    </NavLink>
+                  </li>
+                );
+              }
+            })}
           </ul>
         </nav>
 
@@ -391,7 +503,15 @@ export function Layout() {
       </main>
 
       {/* Keyboard Shortcuts Modal */}
-      {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} navItems={navItems} />}
+      {showShortcuts && (
+        <KeyboardShortcutsModal
+          onClose={() => setShowShortcuts(false)}
+          navItems={orderedSidebarIds
+            .filter(id => !isExternalLinkId(id))
+            .map(id => navItemsMap.get(id)!)
+            .filter(Boolean)}
+        />
+      )}
     </div>
   );
 }
