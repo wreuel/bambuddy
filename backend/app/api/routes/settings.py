@@ -22,6 +22,7 @@ from backend.app.models.maintenance import MaintenanceType, PrinterMaintenance, 
 from backend.app.models.archive import PrintArchive
 from backend.app.schemas.settings import AppSettings, AppSettingsUpdate
 from backend.app.services.printer_manager import printer_manager
+from backend.app.services.spoolman import init_spoolman_client, get_spoolman_client
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -170,6 +171,7 @@ async def export_backup(
     include_filaments: bool = Query(False, description="Include filament inventory"),
     include_maintenance: bool = Query(False, description="Include maintenance types and records"),
     include_archives: bool = Query(False, description="Include print archive metadata"),
+    include_access_codes: bool = Query(False, description="Include printer access codes (security risk!)"),
 ):
     """Export selected data as JSON backup."""
     backup: dict = {
@@ -256,25 +258,29 @@ async def export_backup(
             })
         backup["included"].append("smart_plugs")
 
-    # Printers (without access codes for security)
+    # Printers (access codes only included if explicitly requested)
     if include_printers:
         result = await db.execute(select(Printer))
         printers = result.scalars().all()
         backup["printers"] = []
         for printer in printers:
-            backup["printers"].append({
+            printer_data = {
                 "name": printer.name,
                 "serial_number": printer.serial_number,
                 "ip_address": printer.ip_address,
-                # access_code intentionally excluded for security
                 "model": printer.model,
                 "location": printer.location,
                 "nozzle_count": printer.nozzle_count,
                 "is_active": printer.is_active,
                 "auto_archive": printer.auto_archive,
                 "print_hours_offset": printer.print_hours_offset,
-            })
+            }
+            if include_access_codes:
+                printer_data["access_code"] = printer.access_code
+            backup["printers"].append(printer_data)
         backup["included"].append("printers")
+        if include_access_codes:
+            backup["included"].append("access_codes")
 
     # Filaments
     if include_filaments:
@@ -501,7 +507,14 @@ async def import_backup(
     # Restore settings (always overwrites)
     if "settings" in backup:
         for key, value in backup["settings"].items():
-            await set_setting(db, key, value)
+            # Convert value to proper string format for storage
+            if isinstance(value, bool):
+                str_value = "true" if value else "false"
+            elif value is None:
+                str_value = "None"
+            else:
+                str_value = str(value)
+            await set_setting(db, key, str_value)
             restored["settings"] += 1
 
     # Restore notification providers (skip or overwrite duplicates by name)
@@ -662,15 +675,27 @@ async def import_backup(
                     skipped["printers"] += 1
                     skipped_details["printers"].append(f"{printer_data['name']} ({printer_data['serial_number']})")
             else:
+                # Use access code from backup if provided, otherwise require manual setup
+                access_code = printer_data.get("access_code")
+                has_access_code = access_code and access_code != "CHANGE_ME"
+                is_active_from_backup = printer_data.get("is_active", False)
+                # Handle bool or string "true"/"false"
+                if isinstance(is_active_from_backup, str):
+                    is_active_from_backup = is_active_from_backup.lower() == "true"
+
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Restore: Creating printer {printer_data['name']}, has_access_code={has_access_code}, is_active={is_active_from_backup if has_access_code else False}")
+
                 printer = Printer(
                     name=printer_data["name"],
                     serial_number=printer_data["serial_number"],
                     ip_address=printer_data["ip_address"],
-                    access_code="CHANGE_ME",  # Must be set manually for security
+                    access_code=access_code if has_access_code else "CHANGE_ME",
                     model=printer_data.get("model"),
                     location=printer_data.get("location"),
                     nozzle_count=printer_data.get("nozzle_count", 1),
-                    is_active=False,  # Disabled until access_code is set
+                    is_active=is_active_from_backup if has_access_code else False,
                     auto_archive=printer_data.get("auto_archive", True),
                     print_hours_offset=printer_data.get("print_hours_offset", 0.0),
                 )
@@ -815,9 +840,25 @@ async def import_backup(
             select(Printer).where(Printer.is_active == True)
         )
         active_printers = result.scalars().all()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Restore: Found {len(active_printers)} active printers to reconnect")
         for printer in active_printers:
+            logger.info(f"Restore: Reconnecting printer {printer.name} (id={printer.id}, ip={printer.ip_address})")
             # This will disconnect existing connection (if any) and reconnect
             await printer_manager.connect_printer(printer)
+
+    # If settings were restored, check if Spoolman needs to be reconnected
+    if "settings" in backup:
+        spoolman_enabled = await get_setting(db, "spoolman_enabled")
+        spoolman_url = await get_setting(db, "spoolman_url")
+        if spoolman_enabled and spoolman_enabled.lower() == "true" and spoolman_url:
+            try:
+                client = await init_spoolman_client(spoolman_url)
+                if await client.health_check():
+                    pass  # Connected successfully
+            except Exception:
+                pass  # Spoolman connection failed, but don't fail the restore
 
     # Build summary message
     restored_parts = []

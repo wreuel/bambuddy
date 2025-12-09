@@ -1160,6 +1160,7 @@ export const api = {
       if (categories.filaments !== undefined) params.set('include_filaments', String(categories.filaments));
       if (categories.maintenance !== undefined) params.set('include_maintenance', String(categories.maintenance));
       if (categories.archives !== undefined) params.set('include_archives', String(categories.archives));
+      if (categories.access_codes !== undefined) params.set('include_access_codes', String(categories.access_codes));
     }
     const url = `${API_BASE}/settings/backup${params.toString() ? '?' + params.toString() : ''}`;
     const response = await fetch(url);

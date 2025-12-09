@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Download, X, Settings, Bell, FileText, Plug, Printer, Palette, Wrench, Archive, Loader2 } from 'lucide-react';
+import { Download, X, Settings, Bell, FileText, Plug, Printer, Palette, Wrench, Archive, Loader2, Key, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from './Card';
 import { Button } from './Button';
+import { Toggle } from './Toggle';
 
 interface BackupCategory {
   id: string;
@@ -94,6 +95,7 @@ export function BackupModal({ onClose, onExport }: BackupModalProps) {
     });
     return initial;
   });
+  const [includeAccessCodes, setIncludeAccessCodes] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   // Close on Escape key
@@ -130,7 +132,7 @@ export function BackupModal({ onClose, onExport }: BackupModalProps) {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      await onExport(selected);
+      await onExport({ ...selected, access_codes: includeAccessCodes && selected.printers });
     } finally {
       setIsExporting(false);
     }
@@ -221,11 +223,37 @@ export function BackupModal({ onClose, onExport }: BackupModalProps) {
             <div className="mx-4 mb-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
               <div className="flex items-start gap-2 text-sm">
                 <Archive className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
-                <div className="text-yellow-200">
+                <div className="text-yellow-200 dark:text-yellow-200 text-yellow-700">
                   <span className="font-medium">ZIP file will be created.</span>
-                  <span className="text-yellow-200/70"> Includes all 3MF files, thumbnails, timelapses, and photos. This may take a while and result in a large file.</span>
+                  <span className="text-yellow-600 dark:text-yellow-200/70"> Includes all 3MF files, thumbnails, timelapses, and photos. This may take a while and result in a large file.</span>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Access codes option - only shown when printers are selected */}
+          {selected.printers && (
+            <div className="mx-4 mb-2 p-3 rounded-lg bg-bambu-dark border border-bambu-dark-tertiary">
+              <div className="flex items-center justify-between">
+                <div className="flex items-start gap-2">
+                  <Key className="w-4 h-4 text-orange-500 dark:text-orange-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-white">Include Access Codes</p>
+                    <p className="text-xs text-bambu-gray">For transferring to another machine</p>
+                  </div>
+                </div>
+                <Toggle checked={includeAccessCodes} onChange={setIncludeAccessCodes} />
+              </div>
+              {includeAccessCodes && (
+                <div className="mt-2 p-2 rounded bg-orange-500/10 border border-orange-500/30">
+                  <div className="flex items-start gap-2 text-xs">
+                    <AlertTriangle className="w-3 h-3 text-orange-500 dark:text-orange-400 mt-0.5 flex-shrink-0" />
+                    <span className="text-orange-700 dark:text-orange-200">
+                      Access codes will be included in plain text. Keep this backup file secure!
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

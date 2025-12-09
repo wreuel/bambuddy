@@ -96,9 +96,14 @@ export function RestoreModal({ onClose, onRestore, onSuccess }: RestoreModalProp
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      onClick={state !== 'restoring' ? onClose : undefined}
+      onMouseDown={(e) => {
+        // Only close if clicking directly on the backdrop, not on children
+        if (e.target === e.currentTarget && state !== 'restoring') {
+          onClose();
+        }
+      }}
     >
-      <Card className="w-full max-w-lg" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+      <Card className="w-full max-w-lg">
         <CardContent className="p-0">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-bambu-dark-tertiary">
@@ -155,6 +160,7 @@ export function RestoreModal({ onClose, onRestore, onSuccess }: RestoreModalProp
                     onChange={handleFileSelect}
                   />
                   <button
+                    type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className={`w-full p-4 border-2 border-dashed rounded-lg transition-colors ${
                       selectedFile
@@ -230,10 +236,11 @@ export function RestoreModal({ onClose, onRestore, onSuccess }: RestoreModalProp
 
               {/* Footer */}
               <div className="flex items-center justify-end gap-3 p-4 border-t border-bambu-dark-tertiary">
-                <Button variant="secondary" onClick={onClose}>
+                <Button type="button" variant="secondary" onClick={onClose}>
                   Cancel
                 </Button>
                 <Button
+                  type="button"
                   onClick={handleRestore}
                   disabled={!selectedFile}
                   className="bg-bambu-green hover:bg-bambu-green-dark disabled:opacity-50"
