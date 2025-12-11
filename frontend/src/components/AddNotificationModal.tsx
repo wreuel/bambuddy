@@ -13,9 +13,8 @@ interface AddNotificationModalProps {
 
 const PROVIDER_OPTIONS: { value: ProviderType; label: string; description: string }[] = [
   { value: 'email', label: 'Email', description: 'SMTP email notifications' },
-  { value: 'webpush', label: 'Browser Push', description: 'Push notifications to subscribed browsers (PWA)' },
-  { value: 'discord', label: 'Discord', description: 'Send to Discord channel via webhook' },
   { value: 'telegram', label: 'Telegram', description: 'Notifications via Telegram bot' },
+  { value: 'discord', label: 'Discord', description: 'Send to Discord channel via webhook' },
   { value: 'ntfy', label: 'ntfy', description: 'Free, self-hostable push notifications' },
   { value: 'pushover', label: 'Pushover', description: 'Simple, reliable push notifications' },
   { value: 'callmebot', label: 'CallMeBot/WhatsApp', description: 'Free WhatsApp notifications via CallMeBot' },
@@ -211,8 +210,6 @@ export function AddNotificationModal({ provider, onClose }: AddNotificationModal
           { key: 'field_title', label: 'Title Field Name', placeholder: 'title', type: 'text', required: false },
           { key: 'field_message', label: 'Message Field Name', placeholder: 'message', type: 'text', required: false },
         ];
-      case 'webpush':
-        return []; // No config needed - sends to all subscribed browsers
       default:
         return [];
     }
@@ -230,7 +227,7 @@ export function AddNotificationModal({ provider, onClose }: AddNotificationModal
       onClick={onClose}
     >
       <div
-        className="bg-bambu-dark-secondary rounded-xl border border-bambu-dark-tertiary w-full max-w-lg my-8"
+        className="bg-bambu-dark-secondary rounded-xl border border-bambu-dark-tertiary w-full max-w-lg my-8 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -293,16 +290,6 @@ export function AddNotificationModal({ provider, onClose }: AddNotificationModal
           {/* Provider-specific configuration */}
           <div className="space-y-3">
             <p className="text-sm text-bambu-gray">Configuration</p>
-            {providerType === 'webpush' && (
-              <div className="p-3 bg-bambu-green/10 border border-bambu-green/30 rounded-lg text-sm">
-                <p className="text-bambu-green font-medium mb-1">No configuration needed</p>
-                <p className="text-bambu-gray">
-                  Browser Push sends notifications to all browsers that have enabled push notifications
-                  in Settings → Notifications. Subscribe browsers using the "Browser Push Notifications"
-                  card before creating this provider.
-                </p>
-              </div>
-            )}
             {configFields.map((field) => (
               <div key={field.key}>
                 <label className="block text-sm text-bambu-gray mb-1">
