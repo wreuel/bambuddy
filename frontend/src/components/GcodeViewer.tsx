@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { WebGLPreview, init } from 'gcode-preview';
 import { Loader2, Layers, ChevronLeft, ChevronRight, FileWarning } from 'lucide-react';
 
@@ -18,6 +18,7 @@ interface GcodeViewerProps {
 export function GcodeViewer({ gcodeUrl, buildVolume = { x: 256, y: 256, z: 256 }, filamentColors, className = '' }: GcodeViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewRef = useRef<WebGLPreview | null>(null);
+  const renderTimeoutRef = useRef<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notSliced, setNotSliced] = useState(false);
@@ -134,17 +135,31 @@ export function GcodeViewer({ gcodeUrl, buildVolume = { x: 256, y: 256, z: 256 }
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (renderTimeoutRef.current) {
+        cancelAnimationFrame(renderTimeoutRef.current);
+      }
       preview.dispose();
     };
   }, [gcodeUrl, buildVolume, filamentColors]);
 
-  const handleLayerChange = (layer: number) => {
+  // Debounce render to prevent freezing when dragging slider
+  const handleLayerChange = useCallback((layer: number) => {
     if (!previewRef.current) return;
     const newLayer = Math.max(1, Math.min(layer, totalLayers));
     setCurrentLayer(newLayer);
-    // Clear and re-render up to the specified layer
-    previewRef.current.render();
-  };
+
+    // Debounce the actual render to avoid freezing
+    if (renderTimeoutRef.current) {
+      cancelAnimationFrame(renderTimeoutRef.current);
+    }
+
+    renderTimeoutRef.current = requestAnimationFrame(() => {
+      if (previewRef.current) {
+        previewRef.current.endLayer = newLayer;
+        previewRef.current.render();
+      }
+    });
+  }, [totalLayers]);
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     handleLayerChange(parseInt(e.target.value, 10));
