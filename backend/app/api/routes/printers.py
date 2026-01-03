@@ -1,4 +1,5 @@
 import logging
+import re
 import zipfile
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -447,12 +448,21 @@ async def get_printer_cover(
     if not subtask_name:
         raise HTTPException(404, f"No subtask_name in printer state (state={state.state})")
 
+    # Extract plate number from gcode_file (e.g., "/data/Metadata/plate_12.gcode" -> 12)
+    plate_num = 1
+    gcode_file = state.gcode_file
+    if gcode_file:
+        match = re.search(r"plate_(\d+)\.gcode", gcode_file)
+        if match:
+            plate_num = int(match.group(1))
+            logger.info(f"Detected plate number {plate_num} from gcode_file: {gcode_file}")
+
     # Normalize view parameter
     view_key = view or "default"
 
-    # Check cache
+    # Check cache - include plate_num in cache key for multi-plate projects
     if printer_id in _cover_cache:
-        cache_key = (subtask_name, view_key)
+        cache_key = (subtask_name, plate_num, view_key)
         if cache_key in _cover_cache[printer_id]:
             return Response(content=_cover_cache[printer_id][cache_key], media_type="image/png")
 
@@ -513,21 +523,24 @@ async def get_printer_cover(
 
         try:
             # Try common thumbnail paths in 3MF files
+            # Use plate_num to get the correct plate's thumbnail for multi-plate projects
             # Use top-down view if requested (better for skip objects modal)
             if view == "top":
                 thumbnail_paths = [
+                    f"Metadata/top_{plate_num}.png",
+                    # Fall back to plate 1 if specific plate not found
                     "Metadata/top_1.png",
-                    "Metadata/top_2.png",
-                    "Metadata/top_3.png",
-                    "Metadata/top_4.png",
-                    # Fall back to regular views if no top view
+                    f"Metadata/plate_{plate_num}.png",
                     "Metadata/plate_1.png",
                     "Metadata/thumbnail.png",
                 ]
             else:
                 thumbnail_paths = [
+                    f"Metadata/plate_{plate_num}.png",
+                    # Fall back to plate 1 if specific plate not found
                     "Metadata/plate_1.png",
                     "Metadata/thumbnail.png",
+                    f"Metadata/plate_{plate_num}_small.png",
                     "Metadata/plate_1_small.png",
                     "Thumbnails/thumbnail.png",
                     "thumbnail.png",
@@ -536,10 +549,10 @@ async def get_printer_cover(
             for thumb_path in thumbnail_paths:
                 try:
                     image_data = zf.read(thumb_path)
-                    # Cache the result
+                    # Cache the result - include plate_num in cache key
                     if printer_id not in _cover_cache:
                         _cover_cache[printer_id] = {}
-                    _cover_cache[printer_id][(subtask_name, view_key)] = image_data
+                    _cover_cache[printer_id][(subtask_name, plate_num, view_key)] = image_data
                     return Response(content=image_data, media_type="image/png")
                 except KeyError:
                     continue
@@ -550,7 +563,7 @@ async def get_printer_cover(
                     image_data = zf.read(name)
                     if printer_id not in _cover_cache:
                         _cover_cache[printer_id] = {}
-                    _cover_cache[printer_id][(subtask_name, view_key)] = image_data
+                    _cover_cache[printer_id][(subtask_name, plate_num, view_key)] = image_data
                     return Response(content=image_data, media_type="image/png")
 
             raise HTTPException(404, "No thumbnail found in 3MF file")
