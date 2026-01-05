@@ -23,8 +23,6 @@ import {
   Pencil,
   ArrowUp,
   ArrowDown,
-  LayoutGrid,
-  LayoutList,
   Layers,
   Video,
   Search,
@@ -37,7 +35,6 @@ import {
   Fan,
   Wind,
   AirVent,
-  Minus,
   Download,
 } from 'lucide-react';
 
@@ -862,6 +859,7 @@ function PrinterCard({
   hideIfDisconnected,
   maintenanceInfo,
   viewMode = 'expanded',
+  cardSize = 2,
   amsThresholds,
   spoolmanEnabled = false,
   hasUnlinkedSpools = false,
@@ -870,6 +868,7 @@ function PrinterCard({
   hideIfDisconnected?: boolean;
   maintenanceInfo?: PrinterMaintenanceInfo;
   viewMode?: ViewMode;
+  cardSize?: number;
   amsThresholds?: {
     humidityGood: number;
     humidityFair: number;
@@ -1209,11 +1208,40 @@ function PrinterCard({
     return null;
   }
 
+  // Size-based styling helpers
+  const getImageSize = () => {
+    switch (cardSize) {
+      case 1: return 'w-10 h-10';
+      case 2: return 'w-14 h-14';
+      case 3: return 'w-16 h-16';
+      case 4: return 'w-20 h-20';
+      default: return 'w-14 h-14';
+    }
+  };
+  const getTitleSize = () => {
+    switch (cardSize) {
+      case 1: return 'text-base truncate';
+      case 2: return 'text-lg';
+      case 3: return 'text-xl';
+      case 4: return 'text-2xl';
+      default: return 'text-lg';
+    }
+  };
+  const getSpacing = () => {
+    switch (cardSize) {
+      case 1: return 'mb-2';
+      case 2: return 'mb-4';
+      case 3: return 'mb-5';
+      case 4: return 'mb-6';
+      default: return 'mb-4';
+    }
+  };
+
   return (
     <Card className="relative">
-      <CardContent>
+      <CardContent className={cardSize >= 3 ? 'p-5' : ''}>
         {/* Header */}
-        <div className={viewMode === 'compact' ? 'mb-2' : 'mb-4'}>
+        <div className={getSpacing()}>
           {/* Top row: Image, Name, Menu */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -1221,11 +1249,11 @@ function PrinterCard({
               <img
                 src={getPrinterImage(printer.model)}
                 alt={printer.model || 'Printer'}
-                className={`object-contain rounded-lg bg-bambu-dark flex-shrink-0 ${viewMode === 'compact' ? 'w-10 h-10' : 'w-14 h-14'}`}
+                className={`object-contain rounded-lg bg-bambu-dark flex-shrink-0 ${getImageSize()}`}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className={`font-semibold text-white ${viewMode === 'compact' ? 'text-base truncate' : 'text-lg'}`}>{printer.name}</h3>
+                  <h3 className={`font-semibold text-white ${getTitleSize()}`}>{printer.name}</h3>
                   {/* Connection indicator dot for compact mode */}
                   {viewMode === 'compact' && (
                     <div
@@ -3568,14 +3596,13 @@ export function PrintersPage() {
   const [sortAsc, setSortAsc] = useState<boolean>(() => {
     return localStorage.getItem('printerSortAsc') !== 'false';
   });
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    return (localStorage.getItem('printerViewMode') as ViewMode) || 'expanded';
-  });
   // Card size: 1=small, 2=medium, 3=large, 4=xl
   const [cardSize, setCardSize] = useState<number>(() => {
     const saved = localStorage.getItem('printerCardSize');
     return saved ? parseInt(saved, 10) : 2; // Default to medium
   });
+  // Derive viewMode from cardSize: S=compact, M/L/XL=expanded
+  const viewMode: ViewMode = cardSize === 1 ? 'compact' : 'expanded';
   const queryClient = useQueryClient();
 
   const { data: printers, isLoading } = useQuery({
@@ -3679,26 +3706,14 @@ export function PrintersPage() {
     localStorage.setItem('printerSortAsc', String(newAsc));
   };
 
-  const toggleViewMode = () => {
-    const newMode = viewMode === 'expanded' ? 'compact' : 'expanded';
-    setViewMode(newMode);
-    localStorage.setItem('printerViewMode', newMode);
-  };
-
-  const changeCardSize = (delta: number) => {
-    const newSize = Math.max(1, Math.min(4, cardSize + delta));
-    setCardSize(newSize);
-    localStorage.setItem('printerCardSize', String(newSize));
-  };
-
   // Grid classes based on card size (1=small, 2=medium, 3=large, 4=xl)
   const getGridClasses = () => {
     switch (cardSize) {
-      case 1: return 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5';
-      case 2: return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
-      case 3: return 'grid-cols-1 md:grid-cols-2';
-      case 4: return 'grid-cols-1 max-w-3xl';
-      default: return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+      case 1: return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'; // S: many small cards
+      case 2: return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'; // M: medium cards
+      case 3: return 'grid-cols-1 lg:grid-cols-2'; // L: large cards, 2 columns max
+      case 4: return 'grid-cols-1'; // XL: single column, full width
+      default: return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3';
     }
   };
 
@@ -3797,40 +3812,33 @@ export function PrintersPage() {
             </button>
           </div>
 
-          {/* View mode toggle */}
-          <button
-            onClick={toggleViewMode}
-            className="p-1.5 rounded-lg hover:bg-bambu-dark-tertiary transition-colors"
-            title={viewMode === 'expanded' ? 'Switch to compact view' : 'Switch to expanded view'}
-          >
-            {viewMode === 'expanded' ? (
-              <LayoutList className="w-5 h-5 text-bambu-gray" />
-            ) : (
-              <LayoutGrid className="w-5 h-5 text-bambu-gray" />
-            )}
-          </button>
-
-          {/* Card size control */}
-          <div className="flex items-center gap-1 bg-bambu-dark rounded-lg border border-bambu-dark-tertiary">
-            <button
-              onClick={() => changeCardSize(-1)}
-              disabled={cardSize <= 1}
-              className="p-1.5 rounded-l-lg hover:bg-bambu-dark-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Smaller cards"
-            >
-              <Minus className="w-4 h-4 text-bambu-gray" />
-            </button>
-            <span className="text-xs text-bambu-gray w-6 text-center font-medium">
-              {cardSizeLabels[cardSize - 1]}
-            </span>
-            <button
-              onClick={() => changeCardSize(1)}
-              disabled={cardSize >= 4}
-              className="p-1.5 rounded-r-lg hover:bg-bambu-dark-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Larger cards"
-            >
-              <Plus className="w-4 h-4 text-bambu-gray" />
-            </button>
+          {/* Card size selector */}
+          <div className="flex items-center bg-bambu-dark rounded-lg border border-bambu-dark-tertiary">
+            {cardSizeLabels.map((label, index) => {
+              const size = index + 1;
+              const isSelected = cardSize === size;
+              return (
+                <button
+                  key={label}
+                  onClick={() => {
+                    setCardSize(size);
+                    localStorage.setItem('printerCardSize', String(size));
+                  }}
+                  className={`px-2 py-1.5 text-xs font-medium transition-colors ${
+                    index === 0 ? 'rounded-l-lg' : ''
+                  } ${
+                    index === cardSizeLabels.length - 1 ? 'rounded-r-lg' : ''
+                  } ${
+                    isSelected
+                      ? 'bg-bambu-green text-white'
+                      : 'text-bambu-gray hover:bg-bambu-dark-tertiary hover:text-white'
+                  }`}
+                  title={`${label === 'S' ? 'Small' : label === 'M' ? 'Medium' : label === 'L' ? 'Large' : 'Extra large'} cards`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
 
           <div className="w-px h-6 bg-bambu-dark-tertiary" />
@@ -3925,6 +3933,7 @@ export function PrintersPage() {
                     hideIfDisconnected={hideDisconnected}
                     maintenanceInfo={maintenanceByPrinter[printer.id]}
                     viewMode={viewMode}
+                    cardSize={cardSize}
                     amsThresholds={settings ? {
                       humidityGood: Number(settings.ams_humidity_good) || 40,
                       humidityFair: Number(settings.ams_humidity_fair) || 60,
@@ -3949,6 +3958,7 @@ export function PrintersPage() {
               hideIfDisconnected={hideDisconnected}
               maintenanceInfo={maintenanceByPrinter[printer.id]}
               viewMode={viewMode}
+              cardSize={cardSize}
               spoolmanEnabled={spoolmanEnabled}
               hasUnlinkedSpools={hasUnlinkedSpools}
               amsThresholds={settings ? {
