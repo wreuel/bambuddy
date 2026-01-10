@@ -293,8 +293,20 @@ function ProjectCard({ project, onClick, onEdit, onDelete }: ProjectCardProps) {
               )}
               {/* Filament materials/colors */}
               {project.archives && project.archives.length > 0 && (() => {
-                const materials = [...new Set(project.archives.map(a => a.filament_type).filter(Boolean))];
-                const colors = [...new Set(project.archives.map(a => a.filament_color).filter(Boolean))] as string[];
+                // Flatten comma-separated materials and deduplicate
+                const allMaterials = project.archives
+                  .map(a => a.filament_type)
+                  .filter(Boolean)
+                  .flatMap(m => (m as string).split(',').map(s => s.trim()))
+                  .filter(Boolean);
+                const materials = [...new Set(allMaterials)];
+                // Flatten comma-separated colors and deduplicate
+                const allColors = project.archives
+                  .map(a => a.filament_color)
+                  .filter(Boolean)
+                  .flatMap(c => (c as string).split(',').map(s => s.trim()))
+                  .filter(c => c.startsWith('#') || /^[0-9A-Fa-f]{6}$/.test(c));
+                const colors = [...new Set(allColors)];
                 if (materials.length === 0 && colors.length === 0) return null;
                 return (
                   <div className="flex items-center gap-2 mt-1.5">
