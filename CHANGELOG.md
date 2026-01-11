@@ -5,6 +5,11 @@ All notable changes to Bambuddy will be documented in this file.
 ## [0.1.6b9] - 2026-01-09
 
 ### Added
+- **Chamber light control** - Toggle the printer's chamber LED from the UI:
+  - Light button next to camera button at bottom of printer card
+  - Custom icon with on/off states (yellow when lit)
+  - Works on all Bambu Lab printers (X1, P1, A1 series, H2D)
+  - H2D dual chamber lights controlled together
 - **Archive list view improvements** - Full feature parity with card view:
   - Edit and delete buttons inline with each row
   - Three-dot menu button for context menu access

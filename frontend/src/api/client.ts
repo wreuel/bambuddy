@@ -1333,6 +1333,12 @@ export const api = {
       method: 'POST',
     }),
 
+  // Chamber Light Control
+  setChamberLight: (printerId: number, on: boolean) =>
+    request<{ success: boolean; message: string }>(`/printers/${printerId}/chamber-light?on=${on}`, {
+      method: 'POST',
+    }),
+
   // Skip Objects
   getPrintableObjects: (printerId: number) =>
     request<{

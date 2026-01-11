@@ -3,7 +3,7 @@ import logging
 import re
 import zipfile
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1152,6 +1152,29 @@ async def resume_print(printer_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(500, "Failed to resume print")
 
     return {"success": True, "message": "Print resume command sent"}
+
+
+@router.post("/{printer_id}/chamber-light")
+async def set_chamber_light(
+    printer_id: int,
+    on: bool = Query(..., description="True to turn on, False to turn off"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Turn the chamber light on or off."""
+    result = await db.execute(select(Printer).where(Printer.id == printer_id))
+    printer = result.scalar_one_or_none()
+    if not printer:
+        raise HTTPException(404, "Printer not found")
+
+    client = printer_manager.get_client(printer_id)
+    if not client:
+        raise HTTPException(400, "Printer not connected")
+
+    success = client.set_chamber_light(on)
+    if not success:
+        raise HTTPException(500, "Failed to control chamber light")
+
+    return {"success": True, "message": f"Chamber light {'on' if on else 'off'}"}
 
 
 @router.get("/{printer_id}/print/objects")

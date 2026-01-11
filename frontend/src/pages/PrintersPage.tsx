@@ -65,6 +65,7 @@ import { AMSHistoryModal } from '../components/AMSHistoryModal';
 import { FilamentHoverCard, EmptySlotHoverCard } from '../components/FilamentHoverCard';
 import { LinkSpoolModal } from '../components/LinkSpoolModal';
 import { useToast } from '../contexts/ToastContext';
+import { ChamberLight } from '../components/icons/ChamberLight';
 
 // Complete Bambu Lab filament color mapping by tray_id_name
 // Source: https://github.com/queengooborg/Bambu-Lab-RFID-Library
@@ -1091,6 +1092,33 @@ function PrinterCard({
       queryClient.invalidateQueries({ queryKey: ['printerStatus', printer.id] });
     },
     onError: (error: Error) => showToast(error.message || 'Failed to resume print', 'error'),
+  });
+
+  // Chamber light mutation with optimistic update
+  const chamberLightMutation = useMutation({
+    mutationFn: (on: boolean) => api.setChamberLight(printer.id, on),
+    onMutate: async (on) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['printerStatus', printer.id] });
+      // Snapshot the previous value
+      const previousStatus = queryClient.getQueryData(['printerStatus', printer.id]);
+      // Optimistically update
+      queryClient.setQueryData(['printerStatus', printer.id], (old: typeof status) => ({
+        ...old,
+        chamber_light: on,
+      }));
+      return { previousStatus };
+    },
+    onSuccess: (_, on) => {
+      showToast(`Chamber light ${on ? 'on' : 'off'}`);
+    },
+    onError: (error: Error, _, context) => {
+      // Rollback on error
+      if (context?.previousStatus) {
+        queryClient.setQueryData(['printerStatus', printer.id], context.previousStatus);
+      }
+      showToast(error.message || 'Failed to control chamber light', 'error');
+    },
   });
 
   // Query for printable objects (for skip functionality)
@@ -2360,6 +2388,18 @@ function PrinterCard({
               <p className="truncate">{printer.serial_number}</p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Chamber Light Toggle */}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => chamberLightMutation.mutate(!status?.chamber_light)}
+                disabled={!status?.connected || chamberLightMutation.isPending}
+                title={status?.chamber_light ? 'Turn off chamber light' : 'Turn on chamber light'}
+                className={status?.chamber_light ? 'bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-500/30' : ''}
+              >
+                <ChamberLight on={status?.chamber_light ?? false} className="w-4 h-4" />
+              </Button>
+              {/* Camera Button */}
               <Button
                 variant="secondary"
                 size="sm"
