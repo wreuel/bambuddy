@@ -412,7 +412,9 @@ export interface ProjectListItem {
   target_count: number | null;
   created_at: string;
   archive_count: number;  // Number of print jobs
-  total_items: number;  // Sum of quantities (total items printed)
+  total_items: number;  // Sum of quantities (total items printed, including failed)
+  completed_count: number;  // Sum of quantities for completed prints only
+  failed_count: number;  // Sum of quantities for failed prints
   queue_count: number;
   progress_percent: number | null;
   archives: ArchivePreview[];

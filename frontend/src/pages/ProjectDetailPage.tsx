@@ -79,18 +79,20 @@ function StatCard({
   label,
   value,
   subValue,
+  hint,
   color = 'text-bambu-gray',
 }: {
   icon: React.ElementType;
   label: string;
   value: string | number;
   subValue?: string;
+  hint?: string;
   color?: string;
 }) {
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3" title={hint}>
           <div className={`p-2 rounded-lg bg-bambu-dark ${color}`}>
             <Icon className="w-5 h-5" />
           </div>
@@ -435,9 +437,6 @@ export function ProjectDetailPage() {
 
   const stats = project.stats;
   const progressPercent = stats?.progress_percent ?? 0;
-  const successRate = stats && stats.total_items > 0
-    ? ((stats.completed_prints / stats.total_items) * 100).toFixed(0)
-    : null;
 
   return (
     <div className="p-4 md:p-8 space-y-8">
@@ -486,7 +485,7 @@ export function ProjectDetailPage() {
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-bambu-gray">Progress</span>
               <span className="text-sm font-medium text-white">
-                {stats?.completed_prints || 0} / {project.target_count} items
+                {stats?.completed_prints || 0} / {project.target_count} completed
               </span>
             </div>
             <div className="h-3 bg-bambu-dark rounded-full overflow-hidden">
@@ -515,20 +514,25 @@ export function ProjectDetailPage() {
       {/* Stats grid */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard
-            icon={Package}
-            label="Total Items"
-            value={stats.total_items}
-            subValue={`${stats.total_archives} print job${stats.total_archives !== 1 ? 's' : ''}`}
-            color="text-bambu-green"
-          />
-          <StatCard
-            icon={CheckCircle}
-            label="Completed"
-            value={stats.completed_prints}
-            subValue={stats.failed_prints > 0 ? `${stats.failed_prints} failed` : (successRate ? `${successRate}% success` : undefined)}
-            color="text-blue-400"
-          />
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-bambu-dark text-bambu-green">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-bambu-gray">Print Jobs</p>
+                  <p className="text-xl font-semibold text-white">{stats.completed_prints} <span className="text-sm font-normal text-bambu-gray">successful</span></p>
+                  {stats.failed_prints > 0 && (
+                    <p className="text-sm text-red-400">{stats.failed_prints} failed</p>
+                  )}
+                  {stats.total_archives - stats.completed_prints - stats.failed_prints > 0 && (
+                    <p className="text-sm text-yellow-400">{stats.total_archives - stats.completed_prints - stats.failed_prints} in progress</p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
           <StatCard
             icon={Clock}
             label="Print Time"
@@ -1145,6 +1149,8 @@ export function ProjectDetailPage() {
             ...project,
             archive_count: stats?.total_archives || 0,
             total_items: stats?.total_items || 0,
+            completed_count: stats?.completed_prints || 0,
+            failed_count: stats?.failed_prints || 0,
             queue_count: stats?.queued_prints || 0,
             progress_percent: stats?.progress_percent || null,
             archives: [],

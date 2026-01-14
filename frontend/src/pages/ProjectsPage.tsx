@@ -268,11 +268,11 @@ function ProjectCard({ project, onClick, onEdit, onDelete }: ProjectCardProps) {
                       ? 'bg-bambu-green/20 text-bambu-green'
                       : 'bg-bambu-dark text-bambu-gray'
                   }`}>
-                    {project.total_items}/{project.target_count} items
+                    {project.completed_count}/{project.target_count} completed
                   </span>
-                ) : project.total_items > 0 ? (
+                ) : project.completed_count > 0 ? (
                   <span className="text-xs px-2 py-0.5 rounded-full whitespace-nowrap font-medium bg-bambu-dark text-bambu-gray">
-                    {project.total_items} item{project.total_items !== 1 ? 's' : ''}
+                    {project.completed_count} completed
                   </span>
                 ) : null}
                 {isCompleted && (
@@ -377,7 +377,7 @@ function ProjectCard({ project, onClick, onEdit, onDelete }: ProjectCardProps) {
               <div className="flex items-center justify-between text-xs mb-2">
                 <span className="text-bambu-gray">Progress</span>
                 <span className={progressPercent >= 100 ? 'text-bambu-green font-medium' : 'text-white'}>
-                  {project.total_items} / {project.target_count}
+                  {project.completed_count} / {project.target_count}
                 </span>
               </div>
               <div className="h-2.5 bg-bambu-dark/80 rounded-full overflow-hidden backdrop-blur-sm">
@@ -392,16 +392,27 @@ function ProjectCard({ project, onClick, onEdit, onDelete }: ProjectCardProps) {
                   }}
                 />
               </div>
-              <div className="text-right text-xs text-bambu-gray/60 mt-1">
-                {progressPercent.toFixed(0)}% complete
+              <div className="flex justify-between text-xs text-bambu-gray/60 mt-1">
+                <span>
+                  {project.failed_count > 0 && `${project.failed_count} failed`}
+                </span>
+                <span>{progressPercent.toFixed(0)}% complete</span>
               </div>
             </>
-          ) : project.total_items > 0 ? (
+          ) : project.completed_count > 0 || project.failed_count > 0 ? (
             <div className="flex items-center gap-4 text-xs">
-              <div className="flex items-center gap-1.5 text-bambu-gray">
-                <Archive className="w-3.5 h-3.5" />
-                <span>{project.total_items} item{project.total_items !== 1 ? 's' : ''} completed</span>
-              </div>
+              {project.completed_count > 0 && (
+                <div className="flex items-center gap-1.5 text-bambu-gray">
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>{project.completed_count} completed</span>
+                </div>
+              )}
+              {project.failed_count > 0 && (
+                <div className="flex items-center gap-1.5 text-red-400">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>{project.failed_count} failed</span>
+                </div>
+              )}
               {project.queue_count > 0 && (
                 <div className="flex items-center gap-1.5 text-blue-400">
                   <Clock className="w-3.5 h-3.5" />
@@ -456,10 +467,16 @@ function ProjectCard({ project, onClick, onEdit, onDelete }: ProjectCardProps) {
         {/* Stats footer */}
         <div className="flex items-center justify-between pt-3 border-t border-bambu-dark-tertiary">
           <div className="flex items-center gap-4 text-xs text-bambu-gray">
-            <div className="flex items-center gap-1.5" title="Total items printed">
-              <Archive className="w-3.5 h-3.5" />
-              <span>{project.total_items}</span>
+            <div className="flex items-center gap-1.5" title="Completed prints">
+              <CheckCircle2 className="w-3.5 h-3.5 text-bambu-green" />
+              <span>{project.completed_count}</span>
             </div>
+            {project.failed_count > 0 && (
+              <div className="flex items-center gap-1.5 text-red-400" title="Failed prints">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>{project.failed_count}</span>
+              </div>
+            )}
             {project.queue_count > 0 && (
               <div className="flex items-center gap-1.5 text-blue-400" title="In queue">
                 <ListTodo className="w-3.5 h-3.5" />
