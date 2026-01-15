@@ -117,7 +117,9 @@ class ProjectListResponse(BaseModel):
     created_at: datetime
     # Quick stats
     archive_count: int = 0  # Number of print jobs
-    total_items: int = 0  # Sum of quantities (total items printed)
+    total_items: int = 0  # Sum of quantities (total items printed, including failed)
+    completed_count: int = 0  # Sum of quantities for completed prints only
+    failed_count: int = 0  # Sum of quantities for failed prints
     queue_count: int = 0
     progress_percent: float | None = None
     # Preview of archives (up to 5)

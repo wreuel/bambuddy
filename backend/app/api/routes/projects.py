@@ -49,18 +49,19 @@ async def compute_project_stats(db: AsyncSession, project_id: int, target_count:
     )
     total_items = total_items_result.scalar() or 0
 
-    # Sum completed items (using quantity field)
+    # Count completed archives (number of print jobs) - includes "archived" as successful
     completed_result = await db.execute(
-        select(func.coalesce(func.sum(PrintArchive.quantity), 0)).where(
-            PrintArchive.project_id == project_id, PrintArchive.status == "completed"
+        select(func.count(PrintArchive.id)).where(
+            PrintArchive.project_id == project_id, PrintArchive.status.in_(["completed", "archived"])
         )
     )
     completed_prints = completed_result.scalar() or 0
 
-    # Sum failed items (using quantity field)
+    # Count failed archives (number of print jobs) - includes all failure states
     failed_result = await db.execute(
-        select(func.coalesce(func.sum(PrintArchive.quantity), 0)).where(
-            PrintArchive.project_id == project_id, PrintArchive.status == "failed"
+        select(func.count(PrintArchive.id)).where(
+            PrintArchive.project_id == project_id,
+            PrintArchive.status.in_(["failed", "aborted", "cancelled", "stopped"]),
         )
     )
     failed_prints = failed_result.scalar() or 0
@@ -169,14 +170,23 @@ async def list_projects(
         )
         queue_count = queue_count_result.scalar() or 0
 
-        # Get completed count for progress (sum of quantities)
+        # Count completed archives - includes "archived" as successful
         completed_result = await db.execute(
-            select(func.coalesce(func.sum(PrintArchive.quantity), 0)).where(
+            select(func.count(PrintArchive.id)).where(
                 PrintArchive.project_id == project.id,
-                PrintArchive.status == "completed",
+                PrintArchive.status.in_(["completed", "archived"]),
             )
         )
         completed_count = int(completed_result.scalar() or 0)
+
+        # Count failed archives - includes all failure states
+        failed_result = await db.execute(
+            select(func.count(PrintArchive.id)).where(
+                PrintArchive.project_id == project.id,
+                PrintArchive.status.in_(["failed", "aborted", "cancelled", "stopped"]),
+            )
+        )
+        failed_count = int(failed_result.scalar() or 0)
 
         progress_percent = None
         if project.target_count and project.target_count > 0:
@@ -213,6 +223,8 @@ async def list_projects(
                 created_at=project.created_at,
                 archive_count=archive_count,
                 total_items=total_items,
+                completed_count=completed_count,
+                failed_count=failed_count,
                 queue_count=queue_count,
                 progress_percent=progress_percent,
                 archives=archive_previews,
