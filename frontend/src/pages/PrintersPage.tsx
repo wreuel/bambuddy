@@ -1712,45 +1712,54 @@ function PrinterCard({
               const nozzleHeating = status.temperatures.nozzle_heating || status.temperatures.nozzle_2_heating || false;
               const bedHeating = status.temperatures.bed_heating || false;
               const chamberHeating = status.temperatures.chamber_heating || false;
+              const isDualNozzle = printer.nozzle_count === 2 || status.temperatures.nozzle_2 !== undefined;
+              // active_extruder: 0=right, 1=left
+              const activeNozzle = status.active_extruder === 1 ? 'L' : 'R';
 
               return (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="flex items-center gap-1.5">
                   {/* Nozzle temp - combined for dual nozzle */}
-                  <div className="text-center p-2 bg-bambu-dark rounded-lg">
-                    <HeaterThermometer className="w-4 h-4 mx-auto mb-1" color="text-orange-400" isHeating={nozzleHeating} />
+                  <div className="text-center px-2 py-1.5 bg-bambu-dark rounded-lg flex-1">
+                    <HeaterThermometer className="w-3.5 h-3.5 mx-auto mb-0.5" color="text-orange-400" isHeating={nozzleHeating} />
                     {status.temperatures.nozzle_2 !== undefined ? (
                       <>
-                        <p className="text-[10px] text-bambu-gray">L / R</p>
-                        <p className="text-xs text-white">
+                        <p className="text-[9px] text-bambu-gray">L / R</p>
+                        <p className="text-[11px] text-white">
                           {Math.round(status.temperatures.nozzle || 0)}° / {Math.round(status.temperatures.nozzle_2 || 0)}°
                         </p>
                       </>
                     ) : (
                       <>
-                        <p className="text-[10px] text-bambu-gray">Nozzle</p>
-                        <p className="text-xs text-white">
+                        <p className="text-[9px] text-bambu-gray">Nozzle</p>
+                        <p className="text-[11px] text-white">
                           {Math.round(status.temperatures.nozzle || 0)}°C
                         </p>
                       </>
                     )}
                   </div>
-                  <div className="text-center p-2 bg-bambu-dark rounded-lg">
-                    <HeaterThermometer className="w-4 h-4 mx-auto mb-1" color="text-blue-400" isHeating={bedHeating} />
-                    <p className="text-[10px] text-bambu-gray">Bed</p>
-                    <p className="text-xs text-white">
+                  <div className="text-center px-2 py-1.5 bg-bambu-dark rounded-lg flex-1">
+                    <HeaterThermometer className="w-3.5 h-3.5 mx-auto mb-0.5" color="text-blue-400" isHeating={bedHeating} />
+                    <p className="text-[9px] text-bambu-gray">Bed</p>
+                    <p className="text-[11px] text-white">
                       {Math.round(status.temperatures.bed || 0)}°C
                     </p>
                   </div>
-                  {status.temperatures.chamber !== undefined ? (
-                    <div className="text-center p-2 bg-bambu-dark rounded-lg">
-                      <HeaterThermometer className="w-4 h-4 mx-auto mb-1" color="text-green-400" isHeating={chamberHeating} />
-                      <p className="text-[10px] text-bambu-gray">Chamber</p>
-                      <p className="text-xs text-white">
+                  {status.temperatures.chamber !== undefined && (
+                    <div className="text-center px-2 py-1.5 bg-bambu-dark rounded-lg flex-1">
+                      <HeaterThermometer className="w-3.5 h-3.5 mx-auto mb-0.5" color="text-green-400" isHeating={chamberHeating} />
+                      <p className="text-[9px] text-bambu-gray">Chamber</p>
+                      <p className="text-[11px] text-white">
                         {Math.round(status.temperatures.chamber || 0)}°C
                       </p>
                     </div>
-                  ) : (
-                    <div /> /* Empty placeholder to maintain grid */
+                  )}
+                  {/* Active nozzle indicator for dual-nozzle printers */}
+                  {isDualNozzle && (
+                    <div className="text-center px-2 py-1.5 bg-bambu-dark rounded-lg" title={`Active: ${activeNozzle === 'L' ? 'Left' : 'Right'} nozzle`}>
+                      <p className={`text-[11px] font-bold ${activeNozzle === 'L' ? 'text-amber-400' : 'text-gray-500'}`}>L</p>
+                      <p className="text-[9px] text-bambu-gray">Nozzle</p>
+                      <p className={`text-[11px] font-bold ${activeNozzle === 'R' ? 'text-amber-400' : 'text-gray-500'}`}>R</p>
+                    </div>
                   )}
                 </div>
               );
