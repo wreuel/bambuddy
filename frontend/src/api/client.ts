@@ -558,6 +558,8 @@ export interface AppSettings {
   ams_temp_good: number;      // <= this is green/blue
   ams_temp_fair: number;      // <= this is orange, > is red
   ams_history_retention_days: number;  // days to keep AMS sensor history
+  // Print modal settings
+  per_printer_mapping_expanded: boolean;  // Whether custom mapping is expanded by default in print modal
   // Date/time format settings
   date_format: 'system' | 'us' | 'eu' | 'iso';
   time_format: 'system' | '12h' | '24h';

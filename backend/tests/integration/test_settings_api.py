@@ -328,3 +328,45 @@ class TestSettingsAPI:
         assert "camera_view_mode" in result
         # Default is 'window' as defined in schema
         assert result["camera_view_mode"] in ["window", "embedded"]
+
+    # ========================================================================
+    # Per-printer mapping settings tests
+    # ========================================================================
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_update_per_printer_mapping_expanded(self, async_client: AsyncClient):
+        """Verify per_printer_mapping_expanded can be updated."""
+        response = await async_client.put("/api/v1/settings/", json={"per_printer_mapping_expanded": True})
+
+        assert response.status_code == 200
+        assert response.json()["per_printer_mapping_expanded"] is True
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_per_printer_mapping_expanded_persists(self, async_client: AsyncClient):
+        """CRITICAL: Verify per_printer_mapping_expanded persists after update."""
+        # Update to True
+        await async_client.put("/api/v1/settings/", json={"per_printer_mapping_expanded": True})
+
+        # Verify persistence in new request
+        response = await async_client.get("/api/v1/settings/")
+        assert response.json()["per_printer_mapping_expanded"] is True
+
+        # Update back to False
+        await async_client.put("/api/v1/settings/", json={"per_printer_mapping_expanded": False})
+
+        # Verify persistence
+        response = await async_client.get("/api/v1/settings/")
+        assert response.json()["per_printer_mapping_expanded"] is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_per_printer_mapping_expanded_default(self, async_client: AsyncClient):
+        """Verify per_printer_mapping_expanded has correct default value."""
+        response = await async_client.get("/api/v1/settings/")
+        result = response.json()
+
+        assert "per_printer_mapping_expanded" in result
+        # Default is False as defined in schema
+        assert isinstance(result["per_printer_mapping_expanded"], bool)

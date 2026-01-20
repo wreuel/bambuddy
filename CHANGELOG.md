@@ -23,9 +23,15 @@ All notable changes to Bambuddy will be documented in this file.
 - **Multi-Printer Selection** - Send prints or queue items to multiple printers at once:
   - Checkbox selection for multiple printers in reprint and add-to-queue modes
   - "Select all" / "Clear" buttons for quick selection
-  - Same filament slot mapping applies to all selected printers
   - Progress indicator during multi-printer submission
   - Ideal for print farms with identical filament configurations
+- **Per-Printer AMS Mapping** - Configure filament slot mapping individually for each printer:
+  - Enable "Custom mapping" checkbox under each selected printer
+  - Auto-configure uses RFID data to match filaments automatically
+  - Manual override for specific slot assignments
+  - Match status indicator shows exact/partial/missing matches
+  - Re-read button to refresh printer's loaded filaments
+  - New setting in Settings → Filament to expand custom mapping by default
 - **Enhanced Add-to-Queue** - Now includes plate selection and print options:
   - Configure all print settings upfront instead of editing afterward
   - Filament mapping with manual override capability
@@ -38,20 +44,6 @@ All notable changes to Bambuddy will be documented in this file.
   - Archives are created automatically when prints start
   - Reduces clutter in Archives from unprinted queued files
   - Queue displays library file name, thumbnail, and print time
-
-### Changed
-- **Edit Queue Item modal** - Single printer selection only (reassigns item, doesn't duplicate)
-- **Edit Queue Item button** - Changed from "Print to X Printers" to "Save"
-
-### Fixed
-- **File Manager folder navigation** - Fixed bug where opening a folder would briefly show files then jump back to root:
-  - Removed `selectedFolderId` from useEffect dependency array that was causing a reset loop
-  - Folder navigation now works correctly without resetting
-- **Queue items with library files** - Fixed 500 errors when listing/updating queue items from File Manager
-
-## [0.1.6b10] - 2026-01-20
-
-### New Features
 - **Expandable Color Picker** - Configure AMS Slot modal now has an expandable color palette:
   - 8 basic colors shown by default (White, Black, Red, Blue, Green, Yellow, Orange, Gray)
   - Click "+" to expand 24 additional colors (Cyan, Magenta, Purple, Pink, Brown, Beige, Navy, Teal, Lime, Gold, Silver, Maroon, Olive, Coral, Salmon, Turquoise, Violet, Indigo, Chocolate, Tan, Slate, Charcoal, Ivory, Cream)
@@ -67,7 +59,15 @@ All notable changes to Bambuddy will be documented in this file.
   - Embedded viewer is draggable and resizable with persistent position/size
   - Configure in Settings → General → Camera section
 
+### Changed
+- **Edit Queue Item modal** - Single printer selection only (reassigns item, doesn't duplicate)
+- **Edit Queue Item button** - Changed from "Print to X Printers" to "Save"
+
 ### Fixed
+- **File Manager folder navigation** - Fixed bug where opening a folder would briefly show files then jump back to root:
+  - Removed `selectedFolderId` from useEffect dependency array that was causing a reset loop
+  - Folder navigation now works correctly without resetting
+- **Queue items with library files** - Fixed 500 errors when listing/updating queue items from File Manager
 - **User preset AMS configuration** - Fixed user presets (inheriting from Bambu presets) showing empty fields in Bambu Studio after configuration:
   - Now correctly derives `tray_info_idx` from the preset's `base_id` when `filament_id` is null
   - User presets that inherit from Bambu presets (e.g., "# Overture Matte PLA @BBL H2D") now work correctly

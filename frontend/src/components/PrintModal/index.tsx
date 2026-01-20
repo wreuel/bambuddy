@@ -7,6 +7,7 @@ import { Card, CardContent } from '../Card';
 import { Button } from '../Button';
 import { useToast } from '../../contexts/ToastContext';
 import { useFilamentMapping } from '../../hooks/useFilamentMapping';
+import { useMultiPrinterFilamentMapping, type PerPrinterConfig } from '../../hooks/useMultiPrinterFilamentMapping';
 import { isPlaceholderDate } from '../../utils/amsHelpers';
 import { PrinterSelector } from './PrinterSelector';
 import { PlateSelector } from './PlateSelector';
@@ -99,7 +100,7 @@ export function PrintModal({
     return DEFAULT_SCHEDULE_OPTIONS;
   });
 
-  // Manual slot overrides: slot_id (1-indexed) -> globalTrayId
+  // Manual slot overrides: slot_id (1-indexed) -> globalTrayId (default mapping for single printer or all printers)
   const [manualMappings, setManualMappings] = useState<Record<number, number>>(() => {
     if (mode === 'edit-queue-item' && queueItem?.ams_mapping && Array.isArray(queueItem.ams_mapping)) {
       const mappings: Record<number, number> = {};
@@ -112,6 +113,9 @@ export function PrintModal({
     }
     return {};
   });
+
+  // Per-printer override configs (for multi-printer selection)
+  const [perPrinterConfigs, setPerPrinterConfigs] = useState<Record<number, PerPrinterConfig>>({});
 
   // Track initial values for clearing mappings on change (edit mode only)
   const [initialPrinterIds] = useState(() => (mode === 'edit-queue-item' && queueItem?.printer_id ? [queueItem.printer_id] : []));
@@ -127,6 +131,11 @@ export function PrintModal({
   const effectivePrinterId = selectedPrinters.length > 0 ? selectedPrinters[0] : null;
 
   // Queries
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: api.getSettings,
+  });
+
   const { data: printers, isLoading: loadingPrinters } = useQuery({
     queryKey: ['printers'],
     queryFn: api.getPrinters,
@@ -181,6 +190,16 @@ export function PrintModal({
   // Get AMS mapping from hook (only when single printer selected)
   const { amsMapping } = useFilamentMapping(effectiveFilamentReqs, printerStatus, manualMappings);
 
+  // Multi-printer filament mapping (for per-printer configuration)
+  const multiPrinterMapping = useMultiPrinterFilamentMapping(
+    selectedPrinters,
+    printers,
+    effectiveFilamentReqs,
+    manualMappings,
+    perPrinterConfigs,
+    setPerPrinterConfigs
+  );
+
   // Auto-select first plate for single-plate files
   useEffect(() => {
     if (platesData?.plates?.length === 1 && !selectedPlate) {
@@ -198,18 +217,38 @@ export function PrintModal({
     }
   }, [mode, printers, selectedPrinters.length]);
 
-  // Clear manual mappings when printer or plate changes
+  // Clear manual mappings and per-printer configs when printer or plate changes
   useEffect(() => {
     if (mode === 'edit-queue-item') {
       // For edit mode, clear mappings if printer selection or plate changed from initial
       const printersChanged = JSON.stringify(selectedPrinters.sort()) !== JSON.stringify(initialPrinterIds.sort());
       if (printersChanged || selectedPlate !== initialPlateId) {
         setManualMappings({});
+        setPerPrinterConfigs({});
       }
     } else {
       setManualMappings({});
+      setPerPrinterConfigs({});
     }
   }, [mode, selectedPrinters, selectedPlate, initialPrinterIds, initialPlateId]);
+
+  // Auto-expand per-printer mapping when setting is enabled and multiple printers selected
+  useEffect(() => {
+    if (!settings?.per_printer_mapping_expanded) return;
+    if (selectedPrinters.length <= 1) return;
+
+    // Check if any printer needs to be auto-configured
+    const printersNeedingConfig = selectedPrinters.filter(
+      printerId => !perPrinterConfigs[printerId] || perPrinterConfigs[printerId].useDefault
+    );
+
+    if (printersNeedingConfig.length > 0) {
+      // Auto-configure printers that don't have custom config
+      printersNeedingConfig.forEach(printerId => {
+        multiPrinterMapping.autoConfigurePrinter(printerId);
+      });
+    }
+  }, [settings?.per_printer_mapping_expanded, selectedPrinters, perPrinterConfigs, multiPrinterMapping]);
 
   // Close on Escape key
   useEffect(() => {
@@ -260,6 +299,18 @@ export function PrintModal({
       errors: [],
     };
 
+    // Get mapping for a specific printer (per-printer override or default)
+    const getMappingForPrinter = (printerId: number): number[] | undefined => {
+      // For multi-printer selection, check if this printer has an override
+      if (selectedPrinters.length > 1) {
+        const printerConfig = perPrinterConfigs[printerId];
+        if (printerConfig && !printerConfig.useDefault) {
+          return multiPrinterMapping.getFinalMapping(printerId);
+        }
+      }
+      return amsMapping;
+    };
+
     // Common queue data for add-to-queue and edit modes
     const getQueueData = (printerId: number): PrintQueueItemCreate => ({
       printer_id: printerId,
@@ -269,7 +320,7 @@ export function PrintModal({
       require_previous_success: scheduleOptions.requirePreviousSuccess,
       auto_off_after: scheduleOptions.autoOffAfter,
       manual_start: scheduleOptions.scheduleType === 'manual',
-      ams_mapping: amsMapping,
+      ams_mapping: getMappingForPrinter(printerId),
       plate_id: selectedPlate,
       scheduled_time: scheduleOptions.scheduleType === 'scheduled' && scheduleOptions.scheduledTime
         ? new Date(scheduleOptions.scheduledTime).toISOString()
@@ -284,26 +335,28 @@ export function PrintModal({
       try {
         if (mode === 'reprint') {
           // Reprint mode - start print immediately
+          const printerMapping = getMappingForPrinter(printerId);
           if (isLibraryFile) {
             await api.printLibraryFile(libraryFileId!, printerId, {
-              ams_mapping: amsMapping,
+              ams_mapping: printerMapping,
               ...printOptions,
             });
           } else {
             await api.reprintArchive(archiveId!, printerId, {
               plate_id: selectedPlate ?? undefined,
-              ams_mapping: amsMapping,
+              ams_mapping: printerMapping,
               ...printOptions,
             });
           }
         } else if (mode === 'edit-queue-item' && i === 0) {
           // Edit mode - update the original queue item for the first printer
+          const printerMapping = getMappingForPrinter(printerId);
           const updateData: PrintQueueItemUpdate = {
             printer_id: printerId,
             require_previous_success: scheduleOptions.requirePreviousSuccess,
             auto_off_after: scheduleOptions.autoOffAfter,
             manual_start: scheduleOptions.scheduleType === 'manual',
-            ams_mapping: amsMapping,
+            ams_mapping: printerMapping,
             plate_id: selectedPlate,
             scheduled_time: scheduleOptions.scheduleType === 'scheduled' && scheduleOptions.scheduledTime
               ? new Date(scheduleOptions.scheduledTime).toISOString()
@@ -448,7 +501,7 @@ export function PrintModal({
               )}
             </p>
 
-            {/* Printer selection */}
+            {/* Printer selection with per-printer mapping */}
             <PrinterSelector
               printers={printers || []}
               selectedPrinterIds={selectedPrinters}
@@ -456,17 +509,11 @@ export function PrintModal({
               isLoading={loadingPrinters}
               allowMultiple={true}
               showInactive={mode === 'edit-queue-item'}
+              printerMappingResults={multiPrinterMapping.printerResults}
+              filamentReqs={effectiveFilamentReqs}
+              onAutoConfigurePrinter={multiPrinterMapping.autoConfigurePrinter}
+              onUpdatePrinterConfig={multiPrinterMapping.updatePrinterConfig}
             />
-
-            {/* Multi-printer filament mapping note */}
-            {selectedPrinters.length > 1 && (
-              <div className="flex items-start gap-2 p-3 mb-2 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm">
-                <AlertCircle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-                <p className="text-blue-400">
-                  Slot mapping below applies to all {selectedPrinters.length} printers. Ensure they have matching filament configurations.
-                </p>
-              </div>
-            )}
 
             {/* Plate selection */}
             <PlateSelector
@@ -486,13 +533,14 @@ export function PrintModal({
               </div>
             )}
 
-            {/* Filament mapping - show when printer selected and filament requirements available */}
-            {showFilamentMapping && !archiveDataMissing && (
+            {/* Filament mapping - only show when single printer selected */}
+            {showFilamentMapping && !archiveDataMissing && selectedPrinters.length === 1 && (
               <FilamentMapping
                 printerId={effectivePrinterId!}
                 filamentReqs={effectiveFilamentReqs}
                 manualMappings={manualMappings}
                 onManualMappingChange={setManualMappings}
+                defaultExpanded={settings?.per_printer_mapping_expanded ?? false}
               />
             )}
 

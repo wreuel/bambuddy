@@ -361,6 +361,7 @@ export function SettingsPage() {
       settings.ams_temp_good !== localSettings.ams_temp_good ||
       settings.ams_temp_fair !== localSettings.ams_temp_fair ||
       settings.ams_history_retention_days !== localSettings.ams_history_retention_days ||
+      settings.per_printer_mapping_expanded !== localSettings.per_printer_mapping_expanded ||
       settings.date_format !== localSettings.date_format ||
       settings.time_format !== localSettings.time_format ||
       settings.default_printer_id !== localSettings.default_printer_id ||
@@ -420,6 +421,7 @@ export function SettingsPage() {
         ams_temp_good: localSettings.ams_temp_good,
         ams_temp_fair: localSettings.ams_temp_fair,
         ams_history_retention_days: localSettings.ams_history_retention_days,
+        per_printer_mapping_expanded: localSettings.per_printer_mapping_expanded,
         date_format: localSettings.date_format,
         time_format: localSettings.time_format,
         default_printer_id: localSettings.default_printer_id,
@@ -2518,6 +2520,33 @@ export function SettingsPage() {
                   <p className="text-xs text-bambu-gray">
                     Older humidity and temperature data will be automatically deleted
                   </p>
+                </div>
+
+                {/* Per-Printer Mapping Default */}
+                <div className="space-y-3 pt-4 border-t border-bambu-dark-tertiary">
+                  <div className="flex items-center gap-2 text-white">
+                    <Printer className="w-4 h-4 text-bambu-green" />
+                    <span className="font-medium">Print Modal</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-sm text-white">
+                        Expand custom mapping by default
+                      </label>
+                      <p className="text-xs text-bambu-gray mt-0.5">
+                        When printing to multiple printers, show per-printer AMS mapping expanded
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={localSettings.per_printer_mapping_expanded ?? false}
+                        onChange={(e) => updateSetting('per_printer_mapping_expanded', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-bambu-dark-tertiary peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-bambu-green"></div>
+                    </label>
+                  </div>
                 </div>
               </CardContent>
             </Card>

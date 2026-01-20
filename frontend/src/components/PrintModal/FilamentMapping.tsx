@@ -15,10 +15,11 @@ export function FilamentMapping({
   filamentReqs,
   manualMappings,
   onManualMappingChange,
-}: FilamentMappingProps) {
+  defaultExpanded = false,
+}: FilamentMappingProps & { defaultExpanded?: boolean }) {
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   // Fetch printer status
   const { data: printerStatus } = useQuery({
