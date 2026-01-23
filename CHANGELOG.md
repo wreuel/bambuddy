@@ -28,6 +28,11 @@ All notable changes to Bambuddy will be documented in this file.
   - Photo is captured before notification is sent (ensures image is available)
   - New "External URL" setting in Settings → Network (auto-detects from browser)
   - Full URL constructed for external notification services (Telegram, Email, Discord, etc.)
+- **ZIP File Support in File Manager** - Upload and extract ZIP files directly in the library (Issue #121):
+  - Drop or select ZIP files to automatically extract contents
+  - Option to preserve folder structure from ZIP or extract flat
+  - Extracts thumbnails and metadata from 3MF/gcode files inside ZIP
+  - Progress indicator shows number of files extracted
 
 ### Fixed
 - **Print time stats using slicer estimates** - Quick Stats "Print Time" now uses actual elapsed time (`completed_at - started_at`) instead of slicer estimates; cancelled prints only count time actually printed (Issue #137)

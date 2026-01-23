@@ -2720,6 +2720,26 @@ export const api = {
     }
     return response.json();
   },
+  extractZipFile: async (
+    file: File,
+    folderId?: number | null,
+    preserveStructure: boolean = true
+  ): Promise<ZipExtractResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const params = new URLSearchParams();
+    if (folderId) params.set('folder_id', String(folderId));
+    params.set('preserve_structure', String(preserveStructure));
+    const response = await fetch(`${API_BASE}/library/files/extract-zip?${params}`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+    return response.json();
+  },
   updateLibraryFile: (id: number, data: LibraryFileUpdate) =>
     request<LibraryFile>(`/library/files/${id}`, {
       method: 'PUT',
@@ -3005,6 +3025,24 @@ export interface LibraryStats {
   disk_free_bytes: number;
   disk_total_bytes: number;
   disk_used_bytes: number;
+}
+
+export interface ZipExtractResult {
+  filename: string;
+  file_id: number;
+  folder_id: number | null;
+}
+
+export interface ZipExtractError {
+  filename: string;
+  error: string;
+}
+
+export interface ZipExtractResponse {
+  extracted: number;
+  folders_created: number;
+  files: ZipExtractResult[];
+  errors: ZipExtractError[];
 }
 
 // Library Queue types
