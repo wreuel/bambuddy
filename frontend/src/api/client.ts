@@ -1625,6 +1625,18 @@ export const api = {
     }>(`/printers/${printerId}/files?path=${encodeURIComponent(path)}`),
   getPrinterFileDownloadUrl: (printerId: number, path: string) =>
     `${API_BASE}/printers/${printerId}/files/download?path=${encodeURIComponent(path)}`,
+  downloadPrinterFilesAsZip: async (printerId: number, paths: string[]): Promise<Blob> => {
+    const response = await fetch(`${API_BASE}/printers/${printerId}/files/download-zip`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+    return response.blob();
+  },
   deletePrinterFile: (printerId: number, path: string) =>
     request<{ status: string; path: string }>(`/printers/${printerId}/files?path=${encodeURIComponent(path)}`, {
       method: 'DELETE',

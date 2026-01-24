@@ -707,6 +707,50 @@ async def download_printer_file(
     )
 
 
+@router.post("/{printer_id}/files/download-zip")
+async def download_printer_files_as_zip(
+    printer_id: int,
+    request: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Download multiple files from the printer as a ZIP archive."""
+    import io
+
+    paths = request.get("paths", [])
+    if not paths:
+        raise HTTPException(400, "No files specified")
+
+    result = await db.execute(select(Printer).where(Printer.id == printer_id))
+    printer = result.scalar_one_or_none()
+    if not printer:
+        raise HTTPException(404, "Printer not found")
+
+    # Create ZIP in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in paths:
+            try:
+                data = await download_file_bytes_async(printer.ip_address, printer.access_code, path)
+                if data:
+                    filename = path.split("/")[-1]
+                    zf.writestr(filename, data)
+            except Exception as e:
+                logging.warning(f"Failed to add {path} to ZIP: {e}")
+                continue
+
+    zip_buffer.seek(0)
+    zip_data = zip_buffer.read()
+
+    if len(zip_data) == 0:
+        raise HTTPException(404, "No files could be downloaded")
+
+    return Response(
+        content=zip_data,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="printer-files.zip"'},
+    )
+
+
 @router.delete("/{printer_id}/files")
 async def delete_printer_file(
     printer_id: int,

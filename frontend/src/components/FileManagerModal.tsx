@@ -16,6 +16,9 @@ import {
   Image,
   Search,
   ArrowUpDown,
+  CheckSquare,
+  Square,
+  MinusSquare,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { Button } from './Button';
@@ -82,10 +85,11 @@ export function FileManagerModal({ printerId, printerName, onClose }: FileManage
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [currentPath, setCurrentPath] = useState('/');
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [fileToDelete, setFileToDelete] = useState<string | null>(null);
+  const [filesToDelete, setFilesToDelete] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>('name-asc');
+  const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Close on Escape key
   useEffect(() => {
@@ -108,11 +112,17 @@ export function FileManagerModal({ printerId, printerName, onClose }: FileManage
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (path: string) => api.deletePrinterFile(printerId, path),
-    onSuccess: (_, path) => {
-      showToast(`Deleted: ${path.split('/').pop()}`);
+    mutationFn: async (paths: string[]) => {
+      // Delete files one by one
+      for (const path of paths) {
+        await api.deletePrinterFile(printerId, path);
+      }
+    },
+    onSuccess: () => {
+      showToast(`Deleted ${filesToDelete.length} file${filesToDelete.length > 1 ? 's' : ''}`);
       queryClient.invalidateQueries({ queryKey: ['printerFiles', printerId] });
-      setSelectedFile(null);
+      setSelectedFiles(new Set());
+      setFilesToDelete([]);
     },
     onError: (error: Error) => {
       showToast(`Delete failed: ${error.message}`, 'error');
@@ -121,7 +131,7 @@ export function FileManagerModal({ printerId, printerName, onClose }: FileManage
 
   const navigateToFolder = (path: string) => {
     setCurrentPath(path);
-    setSelectedFile(null);
+    setSelectedFiles(new Set());
   };
 
   const navigateUp = () => {
@@ -129,15 +139,70 @@ export function FileManagerModal({ printerId, printerName, onClose }: FileManage
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
     setCurrentPath(parts.length ? '/' + parts.join('/') : '/');
-    setSelectedFile(null);
+    setSelectedFiles(new Set());
   };
 
-  const handleDownload = (path: string) => {
-    window.open(api.getPrinterFileDownloadUrl(printerId, path), '_blank');
+  const toggleFileSelection = (path: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
   };
 
-  const handleDelete = (path: string) => {
-    setFileToDelete(path);
+  const selectAllFiles = () => {
+    if (!data?.files) return;
+    const filePaths = data.files
+      .filter(f => !f.is_directory && (!searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase())))
+      .map(f => f.path);
+    setSelectedFiles(new Set(filePaths));
+  };
+
+  const deselectAllFiles = () => {
+    setSelectedFiles(new Set());
+  };
+
+  const handleDownload = async () => {
+    if (selectedFiles.size === 0) return;
+
+    const paths = Array.from(selectedFiles);
+
+    if (paths.length === 1) {
+      // Single file - direct download
+      window.open(api.getPrinterFileDownloadUrl(printerId, paths[0]), '_blank');
+      setSelectedFiles(new Set());
+      return;
+    }
+
+    // Multiple files - download as ZIP
+    setDownloadProgress({ current: 0, total: paths.length });
+    try {
+      const blob = await api.downloadPrinterFilesAsZip(printerId, paths);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${printerName.replace(/[^a-zA-Z0-9]/g, '_')}-files.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Downloaded ${paths.length} files as ZIP`);
+      setSelectedFiles(new Set());
+    } catch (error) {
+      showToast(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    } finally {
+      setDownloadProgress(null);
+    }
+  };
+
+  const handleDelete = () => {
+    if (selectedFiles.size === 0) return;
+    setFilesToDelete(Array.from(selectedFiles));
   };
 
   // Quick navigation buttons for common directories
@@ -303,7 +368,7 @@ export function FileManagerModal({ printerId, printerName, onClose }: FileManage
                   })
                   .map((file) => {
                     const FileIcon = getFileIcon(file.name, file.is_directory);
-                    const isSelected = selectedFile === file.path;
+                    const isSelected = selectedFiles.has(file.path);
 
                     return (
                       <div
@@ -316,11 +381,22 @@ export function FileManagerModal({ printerId, printerName, onClose }: FileManage
                         onClick={() => {
                           if (file.is_directory) {
                             navigateToFolder(file.path);
-                          } else {
-                            setSelectedFile(isSelected ? null : file.path);
                           }
                         }}
                       >
+                        {/* Checkbox for files only */}
+                        {!file.is_directory ? (
+                          <button
+                            onClick={(e) => toggleFileSelection(file.path, e)}
+                            className="flex-shrink-0 text-bambu-gray hover:text-white"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-5 h-5 text-bambu-green" />
+                            ) : (
+                              <Square className="w-5 h-5" />
+                            )}
+                          </button>
+                        ) : null}
                         <FileIcon
                           className={`w-5 h-5 flex-shrink-0 ${
                             file.is_directory ? 'text-bambu-green' : 'text-bambu-gray'
@@ -344,25 +420,60 @@ export function FileManagerModal({ printerId, printerName, onClose }: FileManage
 
         {/* Action bar */}
         <div className="flex items-center justify-between p-4 border-t border-bambu-dark-tertiary bg-bambu-dark/50 flex-shrink-0">
-          <div className="text-sm text-bambu-gray">
-            {searchQuery
-              ? `${data?.files?.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())).length || 0} of ${data?.files?.length || 0} items`
-              : `${data?.files?.length || 0} items`
-            }
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-bambu-gray">
+              {selectedFiles.size > 0
+                ? `${selectedFiles.size} selected`
+                : searchQuery
+                  ? `${data?.files?.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())).length || 0} of ${data?.files?.length || 0} items`
+                  : `${data?.files?.length || 0} items`
+              }
+            </div>
+            {/* Select All / Deselect All */}
+            {data?.files?.some(f => !f.is_directory) && (
+              <div className="flex items-center gap-2">
+                {selectedFiles.size > 0 ? (
+                  <button
+                    onClick={deselectAllFiles}
+                    className="flex items-center gap-1 text-xs text-bambu-gray hover:text-white transition-colors"
+                  >
+                    <MinusSquare className="w-4 h-4" />
+                    Deselect All
+                  </button>
+                ) : (
+                  <button
+                    onClick={selectAllFiles}
+                    className="flex items-center gap-1 text-xs text-bambu-gray hover:text-white transition-colors"
+                  >
+                    <CheckSquare className="w-4 h-4" />
+                    Select All
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             <Button
               variant="secondary"
-              disabled={!selectedFile}
-              onClick={() => selectedFile && handleDownload(selectedFile)}
+              disabled={selectedFiles.size === 0 || downloadProgress !== null}
+              onClick={handleDownload}
             >
-              <Download className="w-4 h-4" />
-              Download
+              {downloadProgress ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {downloadProgress.current}/{downloadProgress.total}
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  Download{selectedFiles.size > 1 ? ` (${selectedFiles.size})` : ''}
+                </>
+              )}
             </Button>
             <Button
               variant="secondary"
-              disabled={!selectedFile || deleteMutation.isPending}
-              onClick={() => selectedFile && handleDelete(selectedFile)}
+              disabled={selectedFiles.size === 0 || deleteMutation.isPending}
+              onClick={handleDelete}
               className="text-red-400 hover:text-red-300"
             >
               {deleteMutation.isPending ? (
@@ -370,24 +481,27 @@ export function FileManagerModal({ printerId, printerName, onClose }: FileManage
               ) : (
                 <Trash2 className="w-4 h-4" />
               )}
-              Delete
+              Delete{selectedFiles.size > 1 ? ` (${selectedFiles.size})` : ''}
             </Button>
           </div>
         </div>
       </div>
 
       {/* Delete Confirmation Modal */}
-      {fileToDelete && (
+      {filesToDelete.length > 0 && (
         <ConfirmModal
-          title="Delete File"
-          message={`Delete "${fileToDelete.split('/').pop()}"? This cannot be undone.`}
+          title={filesToDelete.length > 1 ? `Delete ${filesToDelete.length} Files` : 'Delete File'}
+          message={
+            filesToDelete.length > 1
+              ? `Delete ${filesToDelete.length} selected files? This cannot be undone.`
+              : `Delete "${filesToDelete[0].split('/').pop()}"? This cannot be undone.`
+          }
           confirmText="Delete"
           variant="danger"
           onConfirm={() => {
-            deleteMutation.mutate(fileToDelete);
-            setFileToDelete(null);
+            deleteMutation.mutate(filesToDelete);
           }}
-          onCancel={() => setFileToDelete(null)}
+          onCancel={() => setFilesToDelete([])}
         />
       )}
     </div>

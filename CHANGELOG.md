@@ -7,6 +7,11 @@ All notable changes to Bambuddy will be documented in this file.
 ### New Features
 - **Recalculate Costs Button** - New button on Dashboard to recalculate all archive costs using current filament prices (Issue #120)
 - **Create Folder from ZIP** - New option in File Manager upload to automatically create a folder named after the ZIP file (Issue #121)
+- **Multi-File Selection in Printer Files** - Printer card file browser now supports multiple file selection (Issue #144):
+  - Checkbox selection for individual files
+  - Select All / Deselect All buttons
+  - Bulk download as ZIP when multiple files selected
+  - Bulk delete for multiple files at once
 
 ### Fixes
 - **Reprint Cost Tracking** - Reprinting an archive now adds the cost to the existing total, so statistics accurately reflect total filament expenditure across all prints
