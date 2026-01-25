@@ -720,7 +720,7 @@ async def on_print_start(printer_id: int, data: dict):
         if not downloaded_filename and (filename or subtask_name):
             search_term = (subtask_name or filename).lower().replace(".gcode", "").replace(".3mf", "")
             logger.info(f"Direct FTP download failed, searching directories for '{search_term}'")
-            search_dirs = ["/cache", "/model", "/data", "/data/Metadata"]
+            search_dirs = ["/cache", "/model", "/data", "/data/Metadata", "/"]
             for search_dir in search_dirs:
                 if downloaded_filename:
                     break

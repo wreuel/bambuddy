@@ -34,6 +34,9 @@ All notable changes to Bambuddy will be documented in this file.
   - Bulk delete for multiple files at once
 
 ### Fixes
+- **P2S Empty Archive Tiles** - Fixed FTP file search for printers without SD card (Issue #146):
+  - Added root folder `/` to search paths when looking for 3MF files
+  - Printers without SD card store files in root instead of `/cache`
 - **Empty AMS Slot Not Recognized** - Fixed bug where removed spools still appeared in Bambuddy (Issue #147):
   - Old AMS: Now properly applies empty values from tray data updates
   - New AMS (AMS 2 Pro): Now checks `tray_exist_bits` bitmask to detect and clear empty slots

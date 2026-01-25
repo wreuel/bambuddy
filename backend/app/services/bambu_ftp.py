@@ -323,7 +323,7 @@ class BambuFTPClient:
         # Calculate used space by listing root directories
         try:
             total_used = 0
-            dirs_to_scan = ["/cache", "/timelapse", "/model", "/data", "/data/Metadata"]
+            dirs_to_scan = ["/cache", "/timelapse", "/model", "/data", "/data/Metadata", "/"]
 
             for dir_path in dirs_to_scan:
                 try:
