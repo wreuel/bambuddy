@@ -11,6 +11,8 @@ from logging.handlers import RotatingFileHandler
 def _start_error_server(missing_packages: list):
     """Start a minimal HTTP server to display dependency errors in browser."""
     import os
+    import signal
+    import threading
     from http.server import BaseHTTPRequestHandler, HTTPServer
 
     packages_html = "".join(f"<li><code>{p}</code></li>" for p in missing_packages)
@@ -75,11 +77,17 @@ def _start_error_server(missing_packages: list):
     print(f"\nStarting error server on http://0.0.0.0:{port}")
     print("Visit this URL in your browser to see the error details.\n")
 
-    try:
-        server = HTTPServer(("0.0.0.0", port), ErrorHandler)
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
+    server = HTTPServer(("0.0.0.0", port), ErrorHandler)
+
+    def shutdown(signum, frame):
+        print("\nShutting down error server...")
+        threading.Thread(target=server.shutdown).start()
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    server.serve_forever()
+    raise SystemExit(1)
 
 
 def check_dependencies():
