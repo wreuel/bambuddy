@@ -126,8 +126,9 @@ class PrintScheduler:
         if not state:
             return False
 
-        # Printer is idle if state is IDLE or FINISH
-        return state.state in ("IDLE", "FINISH", "unknown")
+        # Printer is idle if state is IDLE, FINISH, FAILED, or unknown
+        # FAILED means previous print failed, printer is ready for new print
+        return state.state in ("IDLE", "FINISH", "FAILED", "unknown")
 
     async def _get_smart_plug(self, db: AsyncSession, printer_id: int) -> SmartPlug | None:
         """Get the smart plug associated with a printer."""
