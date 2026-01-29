@@ -105,6 +105,7 @@ describe('FileManagerPage', () => {
       http.get('/api/v1/settings/', () => {
         return HttpResponse.json({
           check_updates: false,
+          check_printer_firmware: false,
           library_disk_warning_gb: 5,
         });
       }),

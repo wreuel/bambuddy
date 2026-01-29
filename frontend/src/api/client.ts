@@ -681,6 +681,7 @@ export interface AppSettings {
   energy_cost_per_kwh: number;
   energy_tracking_mode: 'print' | 'total';
   check_updates: boolean;
+  check_printer_firmware: boolean;
   notification_language: string;
   // AMS threshold settings
   ams_humidity_good: number;  // <= this is green

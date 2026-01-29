@@ -915,6 +915,7 @@ function PrinterCard({
   timeFormat = 'system',
   cameraViewMode = 'window',
   onOpenEmbeddedCamera,
+  checkPrinterFirmware = true,
 }: {
   printer: Printer;
   hideIfDisconnected?: boolean;
@@ -932,6 +933,7 @@ function PrinterCard({
   timeFormat?: 'system' | '12h' | '24h';
   cameraViewMode?: 'window' | 'embedded';
   onOpenEmbeddedCamera?: (printerId: number, printerName: string) => void;
+  checkPrinterFirmware?: boolean;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -992,12 +994,13 @@ function PrinterCard({
     refetchInterval: 30000, // Fallback polling, WebSocket handles real-time
   });
 
-  // Check for firmware updates (cached for 5 minutes)
+  // Check for firmware updates (cached for 5 minutes, can be disabled in settings)
   const { data: firmwareInfo } = useQuery({
     queryKey: ['firmwareUpdate', printer.id],
     queryFn: () => firmwareApi.checkPrinterUpdate(printer.id),
     staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
+    enabled: checkPrinterFirmware,
   });
 
   // Collect unique tray_info_idx values for cloud filament info lookup
@@ -4648,6 +4651,7 @@ export function PrintersPage() {
                     timeFormat={settings?.time_format || 'system'}
                     cameraViewMode={settings?.camera_view_mode || 'window'}
                     onOpenEmbeddedCamera={(id, name) => setEmbeddedCameraPrinters(prev => new Map(prev).set(id, { id, name }))}
+                    checkPrinterFirmware={settings?.check_printer_firmware !== false}
                   />
                 ))}
               </div>
@@ -4676,6 +4680,7 @@ export function PrintersPage() {
               timeFormat={settings?.time_format || 'system'}
               cameraViewMode={settings?.camera_view_mode || 'window'}
               onOpenEmbeddedCamera={(id, name) => setEmbeddedCameraPrinters(prev => new Map(prev).set(id, { id, name }))}
+              checkPrinterFirmware={settings?.check_printer_firmware !== false}
             />
           ))}
         </div>

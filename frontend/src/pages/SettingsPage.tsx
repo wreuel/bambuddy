@@ -407,6 +407,7 @@ export function SettingsPage() {
       settings.energy_cost_per_kwh !== localSettings.energy_cost_per_kwh ||
       settings.energy_tracking_mode !== localSettings.energy_tracking_mode ||
       settings.check_updates !== localSettings.check_updates ||
+      (settings.check_printer_firmware ?? true) !== (localSettings.check_printer_firmware ?? true) ||
       settings.notification_language !== localSettings.notification_language ||
       settings.ams_humidity_good !== localSettings.ams_humidity_good ||
       settings.ams_humidity_fair !== localSettings.ams_humidity_fair ||
@@ -469,6 +470,7 @@ export function SettingsPage() {
         energy_cost_per_kwh: localSettings.energy_cost_per_kwh,
         energy_tracking_mode: localSettings.energy_tracking_mode,
         check_updates: localSettings.check_updates,
+        check_printer_firmware: localSettings.check_printer_firmware,
         notification_language: localSettings.notification_language,
         ams_humidity_good: localSettings.ams_humidity_good,
         ams_humidity_fair: localSettings.ams_humidity_fair,
@@ -1291,6 +1293,23 @@ export function SettingsPage() {
                     type="checkbox"
                     checked={localSettings.check_updates}
                     onChange={(e) => updateSetting('check_updates', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-bambu-dark-tertiary peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-bambu-green"></div>
+                </label>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white">Check printer firmware</p>
+                  <p className="text-sm text-bambu-gray">
+                    Check for printer firmware updates from Bambu Lab
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={localSettings.check_printer_firmware ?? true}
+                    onChange={(e) => updateSetting('check_printer_firmware', e.target.checked)}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-bambu-dark-tertiary peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-bambu-green"></div>

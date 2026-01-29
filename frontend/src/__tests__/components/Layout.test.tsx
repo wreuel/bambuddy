@@ -29,6 +29,7 @@ describe('Layout', () => {
       http.get('/api/v1/settings/', () => {
         return HttpResponse.json({
           check_updates: false,
+          check_printer_firmware: false,
           auto_archive: true,
         });
       }),

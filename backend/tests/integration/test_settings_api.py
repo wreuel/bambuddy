@@ -215,6 +215,28 @@ class TestSettingsAPI:
         assert result["currency"] == "JPY"
         assert result["check_updates"] is False
 
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_update_check_printer_firmware(self, async_client: AsyncClient):
+        """Verify check_printer_firmware can be updated."""
+        # Default should be True
+        response = await async_client.get("/api/v1/settings/")
+        assert response.json()["check_printer_firmware"] is True
+
+        # Update to False
+        response = await async_client.put("/api/v1/settings/", json={"check_printer_firmware": False})
+        assert response.status_code == 200
+        assert response.json()["check_printer_firmware"] is False
+
+        # Verify persistence
+        response = await async_client.get("/api/v1/settings/")
+        assert response.json()["check_printer_firmware"] is False
+
+        # Update back to True
+        response = await async_client.put("/api/v1/settings/", json={"check_printer_firmware": True})
+        assert response.status_code == 200
+        assert response.json()["check_printer_firmware"] is True
+
     # ========================================================================
     # MQTT settings tests
     # ========================================================================

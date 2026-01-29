@@ -5,6 +5,9 @@ All notable changes to Bambuddy will be documented in this file.
 ## [0.1.6-final] - Not released
 
 ### New Features
+- **Disable Printer Firmware Checks** - New toggle in Settings → General → Updates to disable printer firmware update checks:
+  - Prevents Bambuddy from checking Bambu Lab servers for firmware updates
+  - Useful for users who prefer to manage firmware manually or have network restrictions
 - **Archive Plate Browsing** - Browse plate thumbnails directly in archive cards (Issue #166):
   - Hover over archive card to reveal plate navigation for multi-plate files
   - Left/right arrows to cycle through plate thumbnails
