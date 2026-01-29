@@ -92,6 +92,10 @@ All notable changes to Bambuddy will be documented in this file.
 - **Multi-Plate Thumbnail in Queue** - Fixed queue items showing wrong thumbnail for multi-plate files (Issue #166):
   - Queue now displays the correct plate thumbnail based on selected plate
   - Previously always showed plate 1 thumbnail regardless of selection
+- **A1/A1 Mini Shows Printing Instead of Idle** - Fixed incorrect status display for A1 series printers (Issue #168):
+  - Some A1/A1 Mini firmware versions incorrectly report stage 0 ("Printing") when idle
+  - Now checks gcode_state to correctly display "Idle" for affected printers
+  - Fix only applies to A1 models with the specific buggy condition
 - **HMS Error Notifications** - Get notified when printer errors occur (Issue #84):
   - Automatic notifications for HMS errors (AMS issues, nozzle problems, etc.)
   - Human-readable error messages (853 error codes translated)
