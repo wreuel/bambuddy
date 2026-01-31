@@ -16,7 +16,6 @@ import { ExternalLinkPage } from './pages/ExternalLinkPage';
 import { SystemInfoPage } from './pages/SystemInfoPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
-import { UsersPage } from './pages/UsersPage';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -51,7 +50,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { authEnabled, loading, user } = useAuth();
+  const { authEnabled, loading, user, isAdmin } = useAuth();
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -68,7 +67,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   }
 
   // If user is not admin, redirect to home
-  if (user.role !== 'admin') {
+  if (!isAdmin) {
     return <Navigate to="/" replace />;
   }
 
@@ -121,7 +120,8 @@ function App() {
                   <Route path="projects/:id" element={<ProjectDetailPage />} />
                   <Route path="files" element={<FileManagerPage />} />
                   <Route path="settings" element={<AdminRoute><SettingsPage /></AdminRoute>} />
-                  <Route path="users" element={<UsersPage />} />
+                  <Route path="users" element={<Navigate to="/settings?tab=users" replace />} />
+                  <Route path="groups" element={<Navigate to="/settings?tab=users" replace />} />
                   <Route path="system" element={<SystemInfoPage />} />
                   <Route path="external/:id" element={<ExternalLinkPage />} />
                 </Route>

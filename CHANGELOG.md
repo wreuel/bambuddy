@@ -5,6 +5,14 @@ All notable changes to Bambuddy will be documented in this file.
 ## [0.1.6-final] - Not released
 
 ### New Features
+- **Group-Based Permissions** - Granular access control with user groups:
+  - Create custom groups with specific permissions (50+ granular permissions)
+  - Default system groups: Administrators (full access), Operators (control printers), Viewers (read-only)
+  - Users can belong to multiple groups with additive permissions
+  - Permission-based UI: buttons/features disabled when user lacks permission
+  - Groups management page in Settings → Users → Groups tab
+  - Change password: users can change their own password from sidebar
+  - Included in backup/restore
 - **STL Thumbnail Generation** - Auto-generate preview thumbnails for STL files (Issue #156):
   - Checkbox option when uploading STL files to generate thumbnails automatically
   - Batch generate thumbnails for existing STL files via "Generate Thumbnails" button
