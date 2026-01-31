@@ -21,11 +21,14 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_camera_url(url: str, allowed_schemes: tuple[str, ...] = ("http", "https", "rtsp")) -> bool:
-    """Validate camera URL format.
+    """Validate camera URL format and block dangerous destinations.
 
-    This validates that the URL is well-formed and uses an allowed scheme.
+    This validates that the URL is well-formed, uses an allowed scheme,
+    and does not target cloud metadata services.
+
     Note: This intentionally allows user-provided URLs as that is the
-    purpose of external camera configuration.
+    purpose of external camera configuration. Local network IPs are
+    allowed since cameras are typically on the same LAN.
 
     Args:
         url: URL to validate
@@ -38,7 +41,31 @@ def _validate_camera_url(url: str, allowed_schemes: tuple[str, ...] = ("http", "
         parsed = urlparse(url)
         if not parsed.scheme or not parsed.netloc:
             return False
-        return parsed.scheme.lower() in allowed_schemes
+        if parsed.scheme.lower() not in allowed_schemes:
+            return False
+
+        # Block cloud metadata service endpoints (SSRF mitigation)
+        # These are dangerous destinations that should never be accessed
+        hostname = parsed.hostname or ""
+        blocked_hosts = (
+            "169.254.169.254",  # AWS/GCP/Azure metadata
+            "metadata.google.internal",  # GCP metadata
+            "metadata.google",
+            "localhost",  # Block localhost to prevent internal service access
+            "127.0.0.1",
+            "::1",
+            "0.0.0.0",
+        )
+        if hostname.lower() in blocked_hosts:
+            logger.warning(f"Blocked camera URL targeting restricted host: {hostname}")
+            return False
+
+        # Block link-local addresses (169.254.x.x)
+        if hostname.startswith("169.254."):
+            logger.warning(f"Blocked camera URL targeting link-local address: {hostname}")
+            return False
+
+        return True
     except Exception:
         return False
 
