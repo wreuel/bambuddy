@@ -341,6 +341,11 @@ export interface ArchiveStats {
   total_energy_cost: number;
 }
 
+export interface TagInfo {
+  name: string;
+  count: number;
+}
+
 export interface FailureAnalysis {
   period_days: number;
   total_prints: number;
@@ -847,13 +852,29 @@ export interface CloudDevice {
 export interface SmartPlug {
   id: number;
   name: string;
-  plug_type: 'tasmota' | 'homeassistant';
+  plug_type: 'tasmota' | 'homeassistant' | 'mqtt';
   ip_address: string | null;  // Required for Tasmota
-  ha_entity_id: string | null;  // Required for Home Assistant (e.g., "switch.printer_plug")
+  ha_entity_id: string | null;  // Required for Home Assistant (e.g., "switch.printer_plug", "script.turn_on_printer")
   // Home Assistant energy sensor entities (optional)
   ha_power_entity: string | null;
   ha_energy_today_entity: string | null;
   ha_energy_total_entity: string | null;
+  // MQTT fields (required when plug_type="mqtt")
+  // Legacy field - kept for backward compatibility
+  mqtt_topic: string | null;  // Deprecated, use mqtt_power_topic
+  mqtt_multiplier: number;  // Deprecated, use mqtt_power_multiplier
+  // Power monitoring
+  mqtt_power_topic: string | null;  // Topic for power data
+  mqtt_power_path: string | null;  // e.g., "power_l1" or "data.power"
+  mqtt_power_multiplier: number;  // Unit conversion for power
+  // Energy monitoring
+  mqtt_energy_topic: string | null;  // Topic for energy data
+  mqtt_energy_path: string | null;  // e.g., "energy_l1"
+  mqtt_energy_multiplier: number;  // Unit conversion for energy
+  // State monitoring
+  mqtt_state_topic: string | null;  // Topic for state data
+  mqtt_state_path: string | null;  // e.g., "state_l1" for ON/OFF
+  mqtt_state_on_value: string | null;  // What value means "ON" (e.g., "ON", "true", "1")
   printer_id: number | null;
   enabled: boolean;
   auto_on: boolean;
@@ -872,8 +893,9 @@ export interface SmartPlug {
   schedule_enabled: boolean;
   schedule_on_time: string | null;
   schedule_off_time: string | null;
-  // Switchbar visibility
+  // Visibility options
   show_in_switchbar: boolean;
+  show_on_printer_card: boolean;  // For scripts: show on printer card
   // Status
   last_state: string | null;
   last_checked: string | null;
@@ -884,13 +906,29 @@ export interface SmartPlug {
 
 export interface SmartPlugCreate {
   name: string;
-  plug_type?: 'tasmota' | 'homeassistant';
+  plug_type?: 'tasmota' | 'homeassistant' | 'mqtt';
   ip_address?: string | null;  // Required for Tasmota
   ha_entity_id?: string | null;  // Required for Home Assistant
   // Home Assistant energy sensor entities (optional)
   ha_power_entity?: string | null;
   ha_energy_today_entity?: string | null;
   ha_energy_total_entity?: string | null;
+  // MQTT fields (required when plug_type="mqtt")
+  // Legacy fields - kept for backward compatibility
+  mqtt_topic?: string | null;
+  mqtt_multiplier?: number;
+  // Power monitoring
+  mqtt_power_topic?: string | null;
+  mqtt_power_path?: string | null;
+  mqtt_power_multiplier?: number;
+  // Energy monitoring
+  mqtt_energy_topic?: string | null;
+  mqtt_energy_path?: string | null;
+  mqtt_energy_multiplier?: number;
+  // State monitoring
+  mqtt_state_topic?: string | null;
+  mqtt_state_path?: string | null;
+  mqtt_state_on_value?: string | null;
   printer_id?: number | null;
   enabled?: boolean;
   auto_on?: boolean;
@@ -908,19 +946,35 @@ export interface SmartPlugCreate {
   schedule_enabled?: boolean;
   schedule_on_time?: string | null;
   schedule_off_time?: string | null;
-  // Switchbar visibility
+  // Visibility options
   show_in_switchbar?: boolean;
+  show_on_printer_card?: boolean;
 }
 
 export interface SmartPlugUpdate {
   name?: string;
-  plug_type?: 'tasmota' | 'homeassistant';
+  plug_type?: 'tasmota' | 'homeassistant' | 'mqtt';
   ip_address?: string | null;
   ha_entity_id?: string | null;
   // Home Assistant energy sensor entities (optional)
   ha_power_entity?: string | null;
   ha_energy_today_entity?: string | null;
   ha_energy_total_entity?: string | null;
+  // MQTT fields (legacy)
+  mqtt_topic?: string | null;
+  mqtt_multiplier?: number;
+  // MQTT power fields
+  mqtt_power_topic?: string | null;
+  mqtt_power_path?: string | null;
+  mqtt_power_multiplier?: number;
+  // MQTT energy fields
+  mqtt_energy_topic?: string | null;
+  mqtt_energy_path?: string | null;
+  mqtt_energy_multiplier?: number;
+  // MQTT state fields
+  mqtt_state_topic?: string | null;
+  mqtt_state_path?: string | null;
+  mqtt_state_on_value?: string | null;
   printer_id?: number | null;
   enabled?: boolean;
   auto_on?: boolean;
@@ -938,8 +992,9 @@ export interface SmartPlugUpdate {
   schedule_enabled?: boolean;
   schedule_on_time?: string | null;
   schedule_off_time?: string | null;
-  // Switchbar visibility
+  // Visibility options
   show_in_switchbar?: boolean;
+  show_on_printer_card?: boolean;
 }
 
 // Home Assistant entity for smart plug selection
@@ -947,7 +1002,7 @@ export interface HAEntity {
   entity_id: string;
   friendly_name: string;
   state: string | null;
-  domain: string;  // "switch", "light", "input_boolean"
+  domain: string;  // "switch", "light", "input_boolean", "script"
 }
 
 // Home Assistant sensor entity for energy monitoring
@@ -2050,6 +2105,17 @@ export const api = {
   deleteArchive: (id: number) =>
     request<void>(`/archives/${id}`, { method: 'DELETE' }),
   getArchiveStats: () => request<ArchiveStats>('/archives/stats'),
+  // Tag management
+  getTags: () => request<TagInfo[]>('/archives/tags'),
+  renameTag: (oldName: string, newName: string) =>
+    request<{ affected: number }>(`/archives/tags/${encodeURIComponent(oldName)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ new_name: newName }),
+    }),
+  deleteTag: (name: string) =>
+    request<{ affected: number }>(`/archives/tags/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }),
   recalculateCosts: () =>
     request<{ message: string; updated: number }>('/archives/recalculate-costs', { method: 'POST' }),
   getFailureAnalysis: (options?: { days?: number; printerId?: number; projectId?: number }) => {
@@ -2543,6 +2609,7 @@ export const api = {
   getSmartPlugs: () => request<SmartPlug[]>('/smart-plugs/'),
   getSmartPlug: (id: number) => request<SmartPlug>(`/smart-plugs/${id}`),
   getSmartPlugByPrinter: (printerId: number) => request<SmartPlug | null>(`/smart-plugs/by-printer/${printerId}`),
+  getScriptPlugsByPrinter: (printerId: number) => request<SmartPlug[]>(`/smart-plugs/by-printer/${printerId}/scripts`),
   createSmartPlug: (data: SmartPlugCreate) =>
     request<SmartPlug>('/smart-plugs/', {
       method: 'POST',

@@ -764,45 +764,139 @@ async def run_migrations(conn):
     except Exception:
         pass
 
-    # Migration: Add sliced_for_model column to print_archives for printer model from 3MF
+    # Migration: Remove UNIQUE constraint from smart_plugs.printer_id
+    # This allows HA scripts to coexist with regular plugs (scripts are for multi-device control)
+    # SQLite requires table recreation to drop constraints
     try:
-        await conn.execute(text("ALTER TABLE print_archives ADD COLUMN sliced_for_model VARCHAR(50)"))
+        # Check if we need to migrate (if UNIQUE constraint exists)
+        result = await conn.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='smart_plugs'"))
+        row = result.fetchone()
+        if row and "printer_id INTEGER UNIQUE" in (row[0] or ""):
+            # Create new table without UNIQUE constraint on printer_id
+            await conn.execute(
+                text("""
+                CREATE TABLE smart_plugs_temp (
+                    id INTEGER PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    ip_address VARCHAR(45),
+                    plug_type VARCHAR(20) DEFAULT 'tasmota',
+                    ha_entity_id VARCHAR(100),
+                    ha_power_entity VARCHAR(100),
+                    ha_energy_today_entity VARCHAR(100),
+                    ha_energy_total_entity VARCHAR(100),
+                    printer_id INTEGER REFERENCES printers(id) ON DELETE SET NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT 1,
+                    auto_on BOOLEAN NOT NULL DEFAULT 1,
+                    auto_off BOOLEAN NOT NULL DEFAULT 1,
+                    off_delay_mode VARCHAR(20) NOT NULL DEFAULT 'time',
+                    off_delay_minutes INTEGER NOT NULL DEFAULT 5,
+                    off_temp_threshold INTEGER NOT NULL DEFAULT 70,
+                    username VARCHAR(50),
+                    password VARCHAR(100),
+                    power_alert_enabled BOOLEAN NOT NULL DEFAULT 0,
+                    power_alert_high FLOAT,
+                    power_alert_low FLOAT,
+                    power_alert_last_triggered DATETIME,
+                    schedule_enabled BOOLEAN NOT NULL DEFAULT 0,
+                    schedule_on_time VARCHAR(5),
+                    schedule_off_time VARCHAR(5),
+                    show_in_switchbar BOOLEAN DEFAULT 0,
+                    last_state VARCHAR(10),
+                    last_checked DATETIME,
+                    auto_off_executed BOOLEAN NOT NULL DEFAULT 0,
+                    auto_off_pending BOOLEAN DEFAULT 0,
+                    auto_off_pending_since DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """)
+            )
+            # Copy data
+            await conn.execute(
+                text("""
+                INSERT INTO smart_plugs_temp
+                SELECT id, name, ip_address, plug_type, ha_entity_id, ha_power_entity,
+                       ha_energy_today_entity, ha_energy_total_entity, printer_id, enabled,
+                       auto_on, auto_off, off_delay_mode, off_delay_minutes, off_temp_threshold,
+                       username, password, power_alert_enabled, power_alert_high, power_alert_low,
+                       power_alert_last_triggered, schedule_enabled, schedule_on_time, schedule_off_time,
+                       show_in_switchbar, last_state, last_checked, auto_off_executed,
+                       auto_off_pending, auto_off_pending_since, created_at, updated_at
+                FROM smart_plugs
+            """)
+            )
+            # Drop old table and rename new one
+            await conn.execute(text("DROP TABLE smart_plugs"))
+            await conn.execute(text("ALTER TABLE smart_plugs_temp RENAME TO smart_plugs"))
     except Exception:
         pass
 
-    # Migration: Add target_model column to print_queue for model-based assignment
+    # Migration: Add show_on_printer_card column to smart_plugs
     try:
-        await conn.execute(text("ALTER TABLE print_queue ADD COLUMN target_model VARCHAR(50)"))
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN show_on_printer_card BOOLEAN DEFAULT 1"))
     except Exception:
         pass
 
-    # Migration: Add required_filament_types column to print_queue for filament validation
+    # Migration: Add MQTT smart plug fields (legacy)
     try:
-        await conn.execute(text("ALTER TABLE print_queue ADD COLUMN required_filament_types TEXT"))
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_topic VARCHAR(200)"))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_power_path VARCHAR(100)"))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_energy_path VARCHAR(100)"))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_state_path VARCHAR(100)"))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_multiplier REAL DEFAULT 1.0"))
     except Exception:
         pass
 
-    # Migration: Add waiting_reason column to print_queue for status feedback
+    # Migration: Add enhanced MQTT smart plug fields (separate topics and multipliers)
     try:
-        await conn.execute(text("ALTER TABLE print_queue ADD COLUMN waiting_reason TEXT"))
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_power_topic VARCHAR(200)"))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_power_multiplier REAL DEFAULT 1.0"))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_energy_topic VARCHAR(200)"))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_energy_multiplier REAL DEFAULT 1.0"))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_state_topic VARCHAR(200)"))
+    except Exception:
+        pass
+    try:
+        await conn.execute(text("ALTER TABLE smart_plugs ADD COLUMN mqtt_state_on_value VARCHAR(50)"))
     except Exception:
         pass
 
-    # Migration: Add queue notification event columns to notification_providers
-    queue_notification_columns = [
-        ("on_queue_job_added", "BOOLEAN DEFAULT 0"),
-        ("on_queue_job_assigned", "BOOLEAN DEFAULT 0"),
-        ("on_queue_job_started", "BOOLEAN DEFAULT 0"),
-        ("on_queue_job_waiting", "BOOLEAN DEFAULT 1"),
-        ("on_queue_job_skipped", "BOOLEAN DEFAULT 1"),
-        ("on_queue_job_failed", "BOOLEAN DEFAULT 1"),
-        ("on_queue_completed", "BOOLEAN DEFAULT 0"),
-    ]
-    for col_name, col_def in queue_notification_columns:
-        try:
-            await conn.execute(text(f"ALTER TABLE notification_providers ADD COLUMN {col_name} {col_def}"))
-        except Exception:
-            pass
+    # Migration: Copy existing mqtt_topic to mqtt_power_topic for backward compatibility
+    try:
+        await conn.execute(
+            text("""
+            UPDATE smart_plugs
+            SET mqtt_power_topic = mqtt_topic,
+                mqtt_power_multiplier = mqtt_multiplier
+            WHERE mqtt_topic IS NOT NULL AND mqtt_power_topic IS NULL
+        """)
+        )
+    except Exception:
+        pass
 
     # Migration: Create groups table for permission-based access control
     try:

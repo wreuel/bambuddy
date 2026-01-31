@@ -43,6 +43,7 @@ import {
   FolderKanban,
   ChevronLeft,
   ChevronRight,
+  Settings,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { openInSlicer } from '../utils/slicer';
@@ -66,6 +67,7 @@ import { ProjectPageModal } from '../components/ProjectPageModal';
 import { TimelapseViewer } from '../components/TimelapseViewer';
 import { CompareArchivesModal } from '../components/CompareArchivesModal';
 import { PendingUploadsPanel } from '../components/PendingUploadsPanel';
+import { TagManagementModal } from '../components/TagManagementModal';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -2076,6 +2078,7 @@ export function ArchivesPage() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
+  const [showTagManagement, setShowTagManagement] = useState(false);
   const [highlightedArchiveId, setHighlightedArchiveId] = useState<number | null>(null);
 
   // Clear highlight after 5 seconds and scroll to highlighted element
@@ -2719,6 +2722,13 @@ export function ArchivesPage() {
                     </option>
                   ))}
                 </select>
+                <button
+                  onClick={() => setShowTagManagement(true)}
+                  className="p-2 rounded-lg bg-bambu-dark border border-bambu-dark-tertiary text-bambu-gray hover:text-white hover:border-bambu-green transition-colors"
+                  title="Manage Tags"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
               </div>
             )}
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -2946,6 +2956,11 @@ export function ArchivesPage() {
             setIsSelectionMode(false);
           }}
         />
+      )}
+
+      {/* Tag Management Modal */}
+      {showTagManagement && (
+        <TagManagementModal onClose={() => setShowTagManagement(false)} />
       )}
     </div>
   );

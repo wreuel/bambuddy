@@ -175,13 +175,17 @@ export function SettingsPage() {
       let totalLifetime = 0;
       let reachableCount = 0;
 
-      for (const { status } of statuses) {
-        if (status?.reachable && status.energy) {
+      for (const { plug, status } of statuses) {
+        // For MQTT plugs, consider reachable if we have power data
+        const hasMqttData = plug.plug_type === 'mqtt' && (status?.energy?.power != null);
+        const isReachable = (status?.reachable || hasMqttData) && status?.energy;
+
+        if (isReachable) {
           reachableCount++;
-          if (status.energy.power != null) totalPower += status.energy.power;
-          if (status.energy.today != null) totalToday += status.energy.today;
-          if (status.energy.yesterday != null) totalYesterday += status.energy.yesterday;
-          if (status.energy.total != null) totalLifetime += status.energy.total;
+          if (status.energy?.power != null) totalPower += status.energy.power;
+          if (status.energy?.today != null) totalToday += status.energy.today;
+          if (status.energy?.yesterday != null) totalYesterday += status.energy.yesterday;
+          if (status.energy?.total != null) totalLifetime += status.energy.total;
         }
       }
 
@@ -1950,7 +1954,7 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-bambu-gray">
-                Connect to Home Assistant to control smart plugs via HA's REST API. Supports switch, light, and input_boolean entities.
+                Connect to Home Assistant to control smart plugs via HA's REST API. Supports switch, light, input_boolean, and script entities.
               </p>
 
               <div className="flex items-center justify-between">
