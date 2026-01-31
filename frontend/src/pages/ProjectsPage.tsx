@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -16,12 +16,15 @@ import {
   AlertTriangle,
   ChevronRight,
   MoreVertical,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { api } from '../api/client';
-import type { ProjectListItem, ProjectCreate, ProjectUpdate } from '../api/client';
+import type { ProjectListItem, ProjectCreate, ProjectUpdate, ProjectImport, Permission } from '../api/client';
 import { Button } from '../components/Button';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const PROJECT_COLORS = [
   '#ef4444', // red
@@ -242,9 +245,10 @@ interface ProjectCardProps {
   onClick: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  hasPermission: (permission: Permission) => boolean;
 }
 
-function ProjectCard({ project, onClick, onEdit, onDelete }: ProjectCardProps) {
+function ProjectCard({ project, onClick, onEdit, onDelete, hasPermission }: ProjectCardProps) {
   // Plates progress: archive_count / target_count
   const platesProgressPercent = project.target_count
     ? Math.round((project.archive_count / project.target_count) * 100)
@@ -387,15 +391,23 @@ function ProjectCard({ project, onClick, onEdit, onDelete }: ProjectCardProps) {
                 <div className="fixed inset-0 z-10" onClick={() => setShowActions(false)} />
                 <div className="absolute right-0 top-8 z-20 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded-lg shadow-xl py-1 min-w-[120px]">
                   <button
-                    className="w-full px-3 py-2 text-left text-sm text-white hover:bg-bambu-dark flex items-center gap-2"
-                    onClick={() => { onEdit(); setShowActions(false); }}
+                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${
+                      hasPermission('projects:update') ? 'text-white hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
+                    }`}
+                    onClick={() => { if (hasPermission('projects:update')) { onEdit(); setShowActions(false); } }}
+                    disabled={!hasPermission('projects:update')}
+                    title={!hasPermission('projects:update') ? 'You do not have permission to edit projects' : undefined}
                   >
                     <Edit3 className="w-4 h-4" />
                     Edit
                   </button>
                   <button
-                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-bambu-dark flex items-center gap-2"
-                    onClick={() => { onDelete(); setShowActions(false); }}
+                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${
+                      hasPermission('projects:delete') ? 'text-red-400 hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
+                    }`}
+                    onClick={() => { if (hasPermission('projects:delete')) { onDelete(); setShowActions(false); } }}
+                    disabled={!hasPermission('projects:delete')}
+                    title={!hasPermission('projects:delete') ? 'You do not have permission to delete projects' : undefined}
                   >
                     <Trash2 className="w-4 h-4" />
                     Delete
@@ -563,6 +575,7 @@ export function ProjectsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { hasPermission } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectListItem | undefined>();
   const [statusFilter, setStatusFilter] = useState<string>('active');
@@ -613,6 +626,94 @@ export function ProjectsPage() {
     },
   });
 
+  const importMutation = useMutation({
+    mutationFn: (data: ProjectImport) => api.importProject(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      showToast('Project imported', 'success');
+    },
+    onError: (error: Error) => {
+      showToast(error.message, 'error');
+    },
+  });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportAll = async () => {
+    try {
+      // Export all projects as JSON (metadata only, no files)
+      const allProjects = await api.getProjects();
+      const exports = await Promise.all(
+        allProjects.map(async (p) => {
+          const exported = await api.exportProjectJson(p.id);
+          return exported;
+        })
+      );
+      const blob = new Blob([JSON.stringify(exports, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bambuddy_projects_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Projects exported (metadata only)', 'success');
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const filename = file.name.toLowerCase();
+
+      if (filename.endsWith('.zip')) {
+        // ZIP file: upload via file endpoint
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/v1/projects/import/file', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Import failed');
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['projects'] });
+        showToast('Project imported', 'success');
+      } else {
+        // JSON file: parse and handle bulk or single import
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        // Handle both single project and array of projects
+        const projectsToImport = Array.isArray(data) ? data : [data];
+
+        for (const project of projectsToImport) {
+          await importMutation.mutateAsync(project);
+        }
+
+        if (projectsToImport.length > 1) {
+          showToast(`${projectsToImport.length} projects imported`, 'success');
+        }
+      }
+    } catch (error) {
+      showToast(`Import failed: ${(error as Error).message}`, 'error');
+    }
+
+    // Reset file input
+    e.target.value = '';
+  };
+
   const handleSave = (data: ProjectCreate | ProjectUpdate) => {
     if (editingProject) {
       updateMutation.mutate({ id: editingProject.id, data });
@@ -650,6 +751,15 @@ export function ProjectsPage() {
 
   return (
     <div className="p-4 md:p-8 space-y-8">
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,.zip"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -663,10 +773,35 @@ export function ProjectsPage() {
             Organize and track your 3D printing projects
           </p>
         </div>
-        <Button onClick={() => setShowModal(true)} className="sm:w-auto w-full">
-          <Plus className="w-4 h-4 mr-2" />
-          New Project
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleImportClick}
+            disabled={!hasPermission('projects:create')}
+            title={!hasPermission('projects:create') ? 'You do not have permission to import projects' : 'Import project'}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Import
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={handleExportAll}
+            disabled={!hasPermission('projects:read')}
+            title={!hasPermission('projects:read') ? 'You do not have permission to export projects' : 'Export all projects'}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button
+            onClick={() => setShowModal(true)}
+            className="sm:w-auto w-full"
+            disabled={!hasPermission('projects:create')}
+            title={!hasPermission('projects:create') ? 'You do not have permission to create projects' : undefined}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New Project
+          </Button>
+        </div>
       </div>
 
       {/* Filter tabs */}
@@ -722,7 +857,11 @@ export function ProjectsPage() {
             }
           </p>
           {statusFilter === 'all' && (
-            <Button onClick={() => setShowModal(true)}>
+            <Button
+              onClick={() => setShowModal(true)}
+              disabled={!hasPermission('projects:create')}
+              title={!hasPermission('projects:create') ? 'You do not have permission to create projects' : undefined}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Create Your First Project
             </Button>
@@ -737,6 +876,7 @@ export function ProjectsPage() {
               onClick={() => handleClick(project)}
               onEdit={() => handleEdit(project)}
               onDelete={() => handleDeleteClick(project.id)}
+              hasPermission={hasPermission}
             />
           ))}
         </div>

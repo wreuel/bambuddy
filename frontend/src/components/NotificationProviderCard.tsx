@@ -91,13 +91,13 @@ export function NotificationProviderCard({ provider, onEdit }: NotificationProvi
             {/* Quick enable/disable toggle + Status indicator */}
             <div className="flex items-center gap-3">
               {provider.last_success && (
-                <span className="text-xs text-bambu-green hidden sm:inline">Last: {formatDateOnly(provider.last_success)}</span>
+                <span className="text-xs text-status-ok hidden sm:inline">Last: {formatDateOnly(provider.last_success)}</span>
               )}
               {/* Only show error if it's more recent than last success */}
               {provider.last_error && provider.last_error_at && (
                 !provider.last_success || (parseUTCDate(provider.last_error_at)?.getTime() || 0) > (parseUTCDate(provider.last_success)?.getTime() || 0)
               ) && (
-                <span className="text-xs text-red-400" title={provider.last_error}>Error</span>
+                <span className="text-xs text-status-error" title={provider.last_error}>Error</span>
               )}
               <Toggle
                 checked={provider.enabled}
@@ -123,6 +123,9 @@ export function NotificationProviderCard({ provider, onEdit }: NotificationProvi
           <div className="mb-3 flex flex-wrap gap-1">
             {provider.on_print_start && (
               <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">Start</span>
+            )}
+            {provider.on_plate_not_empty && (
+              <span className="px-2 py-0.5 bg-rose-600/20 text-rose-300 text-xs rounded">Plate Check</span>
             )}
             {provider.on_print_complete && (
               <span className="px-2 py-0.5 bg-bambu-green/20 text-bambu-green text-xs rounded">Complete</span>
@@ -255,6 +258,17 @@ export function NotificationProviderCard({ provider, onEdit }: NotificationProvi
                 </div>
 
                 <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-white">Plate Not Empty</p>
+                    <p className="text-xs text-bambu-gray">Objects detected before print</p>
+                  </div>
+                  <Toggle
+                    checked={provider.on_plate_not_empty ?? true}
+                    onChange={(checked) => updateMutation.mutate({ on_plate_not_empty: checked })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
                   <p className="text-sm text-white">Print Completed</p>
                   <Toggle
                     checked={provider.on_print_complete}
@@ -380,6 +394,88 @@ export function NotificationProviderCard({ provider, onEdit }: NotificationProvi
                   <Toggle
                     checked={provider.on_ams_ht_temperature_high ?? false}
                     onChange={(checked) => updateMutation.mutate({ on_ams_ht_temperature_high: checked })}
+                  />
+                </div>
+              </div>
+
+              {/* Print Queue Events */}
+              <div className="space-y-2">
+                <p className="text-xs text-bambu-gray uppercase tracking-wide">Print Queue</p>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-white">Job Added</p>
+                    <p className="text-xs text-bambu-gray">Job added to queue</p>
+                  </div>
+                  <Toggle
+                    checked={provider.on_queue_job_added ?? false}
+                    onChange={(checked) => updateMutation.mutate({ on_queue_job_added: checked })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-white">Job Assigned</p>
+                    <p className="text-xs text-bambu-gray">Model-based job assigned to printer</p>
+                  </div>
+                  <Toggle
+                    checked={provider.on_queue_job_assigned ?? false}
+                    onChange={(checked) => updateMutation.mutate({ on_queue_job_assigned: checked })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-white">Job Started</p>
+                    <p className="text-xs text-bambu-gray">Queue job started printing</p>
+                  </div>
+                  <Toggle
+                    checked={provider.on_queue_job_started ?? false}
+                    onChange={(checked) => updateMutation.mutate({ on_queue_job_started: checked })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-white">Job Waiting</p>
+                    <p className="text-xs text-bambu-gray">Job waiting for filament</p>
+                  </div>
+                  <Toggle
+                    checked={provider.on_queue_job_waiting ?? true}
+                    onChange={(checked) => updateMutation.mutate({ on_queue_job_waiting: checked })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-white">Job Skipped</p>
+                    <p className="text-xs text-bambu-gray">Job skipped (previous failed)</p>
+                  </div>
+                  <Toggle
+                    checked={provider.on_queue_job_skipped ?? true}
+                    onChange={(checked) => updateMutation.mutate({ on_queue_job_skipped: checked })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-white">Job Failed</p>
+                    <p className="text-xs text-bambu-gray">Job failed to start</p>
+                  </div>
+                  <Toggle
+                    checked={provider.on_queue_job_failed ?? true}
+                    onChange={(checked) => updateMutation.mutate({ on_queue_job_failed: checked })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-white">Queue Complete</p>
+                    <p className="text-xs text-bambu-gray">All queue jobs finished</p>
+                  </div>
+                  <Toggle
+                    checked={provider.on_queue_completed ?? false}
+                    onChange={(checked) => updateMutation.mutate({ on_queue_completed: checked })}
                   />
                 </div>
               </div>

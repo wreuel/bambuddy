@@ -41,15 +41,19 @@ import {
   ArrowUp,
   ArrowDown,
   Hand,
+  Check,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { parseUTCDate, formatDateTime, type TimeFormat } from '../utils/date';
-import type { PrintQueueItem } from '../api/client';
+import type { PrintQueueItem, PrintQueueBulkUpdate, Permission } from '../api/client';
 import { Card, CardContent } from '../components/Card';
 import { Button } from '../components/Button';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { PrintModal } from '../components/PrintModal';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 
 function formatDuration(seconds: number | null | undefined): string {
   if (!seconds) return '--';
@@ -74,12 +78,22 @@ function formatRelativeTime(dateString: string | null, timeFormat: TimeFormat = 
   return formatDateTime(dateString, timeFormat);
 }
 
-function StatusBadge({ status }: { status: PrintQueueItem['status'] }) {
+function StatusBadge({ status, waitingReason }: { status: PrintQueueItem['status']; waitingReason?: string | null }) {
+  // Special case: pending with waiting_reason shows as "Waiting"
+  if (status === 'pending' && waitingReason) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border text-purple-400 bg-purple-400/10 border-purple-400/20">
+        <Clock className="w-3.5 h-3.5" />
+        Waiting
+      </span>
+    );
+  }
+
   const config = {
-    pending: { icon: Clock, color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20', label: 'Pending' },
+    pending: { icon: Clock, color: 'text-status-warning bg-status-warning/10 border-status-warning/20', label: 'Pending' },
     printing: { icon: Play, color: 'text-blue-400 bg-blue-400/10 border-blue-400/20', label: 'Printing' },
-    completed: { icon: CheckCircle, color: 'text-green-400 bg-green-400/10 border-green-400/20', label: 'Completed' },
-    failed: { icon: XCircle, color: 'text-red-400 bg-red-400/10 border-red-400/20', label: 'Failed' },
+    completed: { icon: CheckCircle, color: 'text-status-ok bg-status-ok/10 border-status-ok/20', label: 'Completed' },
+    failed: { icon: XCircle, color: 'text-status-error bg-status-error/10 border-status-error/20', label: 'Failed' },
     skipped: { icon: SkipForward, color: 'text-orange-400 bg-orange-400/10 border-orange-400/20', label: 'Skipped' },
     cancelled: { icon: X, color: 'text-gray-400 bg-gray-400/10 border-gray-400/20', label: 'Cancelled' },
   };
@@ -94,6 +108,163 @@ function StatusBadge({ status }: { status: PrintQueueItem['status'] }) {
   );
 }
 
+// Bulk edit modal for multiple queue items
+function BulkEditModal({
+  selectedCount,
+  printers,
+  onSave,
+  onClose,
+  isSaving,
+}: {
+  selectedCount: number;
+  printers: { id: number; name: string }[];
+  onSave: (data: Partial<PrintQueueBulkUpdate>) => void;
+  onClose: () => void;
+  isSaving: boolean;
+}) {
+  const [printerId, setPrinterId] = useState<number | null | 'unchanged'>('unchanged');
+  const [manualStart, setManualStart] = useState<boolean | 'unchanged'>('unchanged');
+  const [autoOffAfter, setAutoOffAfter] = useState<boolean | 'unchanged'>('unchanged');
+  const [requirePreviousSuccess, setRequirePreviousSuccess] = useState<boolean | 'unchanged'>('unchanged');
+  const [bedLevelling, setBedLevelling] = useState<boolean | 'unchanged'>('unchanged');
+  const [flowCali, setFlowCali] = useState<boolean | 'unchanged'>('unchanged');
+  const [vibrationCali, setVibrationCali] = useState<boolean | 'unchanged'>('unchanged');
+  const [layerInspect, setLayerInspect] = useState<boolean | 'unchanged'>('unchanged');
+  const [timelapse, setTimelapse] = useState<boolean | 'unchanged'>('unchanged');
+  const [useAms, setUseAms] = useState<boolean | 'unchanged'>('unchanged');
+
+  const handleSave = () => {
+    const data: Partial<PrintQueueBulkUpdate> = {};
+    if (printerId !== 'unchanged') data.printer_id = printerId;
+    if (manualStart !== 'unchanged') data.manual_start = manualStart;
+    if (autoOffAfter !== 'unchanged') data.auto_off_after = autoOffAfter;
+    if (requirePreviousSuccess !== 'unchanged') data.require_previous_success = requirePreviousSuccess;
+    if (bedLevelling !== 'unchanged') data.bed_levelling = bedLevelling;
+    if (flowCali !== 'unchanged') data.flow_cali = flowCali;
+    if (vibrationCali !== 'unchanged') data.vibration_cali = vibrationCali;
+    if (layerInspect !== 'unchanged') data.layer_inspect = layerInspect;
+    if (timelapse !== 'unchanged') data.timelapse = timelapse;
+    if (useAms !== 'unchanged') data.use_ams = useAms;
+    onSave(data);
+  };
+
+  const hasChanges = printerId !== 'unchanged' || manualStart !== 'unchanged' || autoOffAfter !== 'unchanged' ||
+    requirePreviousSuccess !== 'unchanged' || bedLevelling !== 'unchanged' || flowCali !== 'unchanged' ||
+    vibrationCali !== 'unchanged' || layerInspect !== 'unchanged' || timelapse !== 'unchanged' || useAms !== 'unchanged';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-bambu-dark-secondary rounded-xl border border-bambu-dark-tertiary w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b border-bambu-dark-tertiary">
+          <h2 className="text-lg font-semibold text-white">
+            Edit {selectedCount} Item{selectedCount !== 1 ? 's' : ''}
+          </h2>
+          <button onClick={onClose} className="p-1 hover:bg-bambu-dark rounded">
+            <X className="w-5 h-5 text-bambu-gray" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-bambu-gray">
+            Only changed settings will be applied to selected items.
+          </p>
+
+          {/* Printer Assignment */}
+          <div>
+            <label className="block text-sm font-medium text-white mb-2">Printer</label>
+            <select
+              value={printerId === null ? 'null' : printerId === 'unchanged' ? 'unchanged' : String(printerId)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'unchanged') setPrinterId('unchanged');
+                else if (val === 'null') setPrinterId(null);
+                else setPrinterId(Number(val));
+              }}
+              className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+            >
+              <option value="unchanged">— No change —</option>
+              <option value="null">Unassigned</option>
+              {printers.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Queue Options */}
+          <div>
+            <label className="block text-sm font-medium text-white mb-2">Queue Options</label>
+            <div className="space-y-2">
+              <TriStateToggle label="Staged (manual start)" value={manualStart} onChange={setManualStart} />
+              <TriStateToggle label="Auto power off after print" value={autoOffAfter} onChange={setAutoOffAfter} />
+              <TriStateToggle label="Require previous success" value={requirePreviousSuccess} onChange={setRequirePreviousSuccess} />
+            </div>
+          </div>
+
+          {/* Print Options */}
+          <div>
+            <label className="block text-sm font-medium text-white mb-2">Print Options</label>
+            <div className="space-y-2">
+              <TriStateToggle label="Bed levelling" value={bedLevelling} onChange={setBedLevelling} />
+              <TriStateToggle label="Flow calibration" value={flowCali} onChange={setFlowCali} />
+              <TriStateToggle label="Vibration calibration" value={vibrationCali} onChange={setVibrationCali} />
+              <TriStateToggle label="First layer inspection" value={layerInspect} onChange={setLayerInspect} />
+              <TriStateToggle label="Timelapse" value={timelapse} onChange={setTimelapse} />
+              <TriStateToggle label="Use AMS" value={useAms} onChange={setUseAms} />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 p-4 border-t border-bambu-dark-tertiary">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={handleSave}
+            disabled={!hasChanges || isSaving}
+          >
+            {isSaving ? 'Saving...' : 'Apply Changes'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Tri-state toggle for bulk edit (unchanged / on / off)
+function TriStateToggle({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | 'unchanged';
+  onChange: (val: boolean | 'unchanged') => void;
+}) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-sm text-bambu-gray">{label}</span>
+      <div className="flex items-center gap-1 bg-bambu-dark rounded-lg p-0.5">
+        <button
+          onClick={() => onChange('unchanged')}
+          className={`px-2 py-1 text-xs rounded ${value === 'unchanged' ? 'bg-bambu-dark-tertiary text-white' : 'text-bambu-gray hover:text-white'}`}
+        >
+          —
+        </button>
+        <button
+          onClick={() => onChange(false)}
+          className={`px-2 py-1 text-xs rounded ${value === false ? 'bg-red-500/20 text-red-400' : 'text-bambu-gray hover:text-white'}`}
+        >
+          Off
+        </button>
+        <button
+          onClick={() => onChange(true)}
+          className={`px-2 py-1 text-xs rounded ${value === true ? 'bg-bambu-green/20 text-bambu-green' : 'text-bambu-gray hover:text-white'}`}
+        >
+          On
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Sortable queue item for drag and drop
 function SortableQueueItem({
   item,
@@ -105,6 +276,9 @@ function SortableQueueItem({
   onRequeue,
   onStart,
   timeFormat = 'system',
+  isSelected = false,
+  onToggleSelect,
+  hasPermission,
 }: {
   item: PrintQueueItem;
   position?: number;
@@ -115,7 +289,11 @@ function SortableQueueItem({
   onRequeue: () => void;
   onStart: () => void;
   timeFormat?: TimeFormat;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
+  hasPermission: (permission: Permission) => boolean;
 }) {
+  const canReorder = hasPermission('queue:reorder');
   const {
     attributes,
     listeners,
@@ -123,7 +301,7 @@ function SortableQueueItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.id, disabled: item.status !== 'pending' });
+  } = useSortable({ id: item.id, disabled: item.status !== 'pending' || !canReorder });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -146,6 +324,23 @@ function SortableQueueItem({
       `}
     >
       <div className="flex items-center gap-4 p-4">
+        {/* Selection checkbox for pending items */}
+        {isPending && onToggleSelect && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect();
+            }}
+            className={`flex items-center justify-center w-6 h-6 rounded border transition-colors ${
+              isSelected
+                ? 'bg-bambu-green border-bambu-green text-white'
+                : 'border-white/30 bg-black/30 hover:border-bambu-green/50'
+            }`}
+          >
+            {isSelected && <Check className="w-4 h-4" />}
+          </button>
+        )}
+
         {/* Drag handle or position number */}
         {isPending ? (
           <div
@@ -163,17 +358,25 @@ function SortableQueueItem({
           <div className="w-8" />
         )}
 
-        {/* Thumbnail */}
+        {/* Thumbnail - use plate-specific thumbnail if plate_id is set */}
         <div className="w-14 h-14 flex-shrink-0 bg-bambu-dark rounded-lg overflow-hidden">
           {item.archive_thumbnail ? (
             <img
-              src={api.getArchiveThumbnail(item.archive_id!)}
+              src={
+                item.plate_id != null
+                  ? api.getArchivePlateThumbnail(item.archive_id!, item.plate_id)
+                  : api.getArchiveThumbnail(item.archive_id!)
+              }
               alt=""
               className="w-full h-full object-cover"
             />
           ) : item.library_file_thumbnail ? (
             <img
-              src={api.getLibraryFileThumbnailUrl(item.library_file_id!)}
+              src={
+                item.plate_id != null
+                  ? api.getLibraryFilePlateThumbnail(item.library_file_id!, item.plate_id)
+                  : api.getLibraryFileThumbnailUrl(item.library_file_id!)
+              }
               alt=""
               className="w-full h-full object-cover"
             />
@@ -210,9 +413,13 @@ function SortableQueueItem({
           </div>
 
           <div className="flex items-center gap-3 text-sm text-bambu-gray">
-            <span className={`flex items-center gap-1.5 ${item.printer_id === null ? 'text-orange-400' : ''}`}>
+            <span className={`flex items-center gap-1.5 ${item.printer_id === null && !item.target_model ? 'text-orange-400' : ''} ${item.target_model ? 'text-blue-400' : ''}`}>
               <Printer className="w-3.5 h-3.5" />
-              {item.printer_id === null ? 'Unassigned' : (item.printer_name || `Printer #${item.printer_id}`)}
+              {item.target_model
+                ? `Any ${item.target_model}${item.required_filament_types?.length ? ` (${item.required_filament_types.join(', ')})` : ''}`
+                : item.printer_id === null
+                  ? 'Unassigned'
+                  : (item.printer_name || `Printer #${item.printer_id}`)}
             </span>
             {item.print_time_seconds && (
               <span className="flex items-center gap-1.5">
@@ -259,6 +466,14 @@ function SortableQueueItem({
             </div>
           )}
 
+          {/* Waiting reason for model-based assignments */}
+          {item.waiting_reason && item.status === 'pending' && (
+            <p className="text-xs text-purple-400 mt-2 flex items-start gap-1">
+              <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+              <span>{item.waiting_reason}</span>
+            </p>
+          )}
+
           {/* Error message */}
           {item.error_message && (
             <p className="text-xs text-red-400 mt-2 flex items-center gap-1">
@@ -269,7 +484,7 @@ function SortableQueueItem({
         </div>
 
         {/* Status badge */}
-        <StatusBadge status={item.status} />
+        <StatusBadge status={item.status} waitingReason={item.waiting_reason} />
 
         {/* Actions */}
         <div className="flex items-center gap-1">
@@ -278,7 +493,8 @@ function SortableQueueItem({
               variant="ghost"
               size="sm"
               onClick={onStop}
-              title="Stop Print"
+              disabled={!hasPermission('printers:control')}
+              title={!hasPermission('printers:control') ? 'You do not have permission to stop prints' : 'Stop Print'}
               className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
             >
               <StopCircle className="w-4 h-4" />
@@ -291,7 +507,8 @@ function SortableQueueItem({
                   variant="ghost"
                   size="sm"
                   onClick={onStart}
-                  title="Start Print"
+                  disabled={!hasPermission('printers:control')}
+                  title={!hasPermission('printers:control') ? 'You do not have permission to start prints' : 'Start Print'}
                   className="text-bambu-green hover:text-bambu-green-light hover:bg-bambu-green/10"
                 >
                   <Play className="w-4 h-4" />
@@ -301,7 +518,8 @@ function SortableQueueItem({
                 variant="ghost"
                 size="sm"
                 onClick={onEdit}
-                title="Edit"
+                disabled={!hasPermission('queue:update')}
+                title={!hasPermission('queue:update') ? 'You do not have permission to edit queue items' : 'Edit'}
               >
                 <Pencil className="w-4 h-4" />
               </Button>
@@ -309,7 +527,8 @@ function SortableQueueItem({
                 variant="ghost"
                 size="sm"
                 onClick={onCancel}
-                title="Cancel"
+                disabled={!hasPermission('queue:delete')}
+                title={!hasPermission('queue:delete') ? 'You do not have permission to cancel queue items' : 'Cancel'}
                 className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
               >
                 <X className="w-4 h-4" />
@@ -322,7 +541,8 @@ function SortableQueueItem({
                 variant="ghost"
                 size="sm"
                 onClick={onRequeue}
-                title="Re-queue"
+                disabled={!hasPermission('queue:create')}
+                title={!hasPermission('queue:create') ? 'You do not have permission to re-queue items' : 'Re-queue'}
                 className="text-bambu-green hover:text-bambu-green/80 hover:bg-bambu-green/10"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -331,7 +551,8 @@ function SortableQueueItem({
                 variant="ghost"
                 size="sm"
                 onClick={onRemove}
-                title="Remove"
+                disabled={!hasPermission('queue:delete')}
+                title={!hasPermission('queue:delete') ? 'You do not have permission to remove queue items' : 'Remove'}
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
@@ -346,6 +567,7 @@ function SortableQueueItem({
 export function QueuePage() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { hasPermission } = useAuth();
   const [filterPrinter, setFilterPrinter] = useState<number | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
@@ -355,6 +577,8 @@ export function QueuePage() {
     type: 'cancel' | 'remove' | 'stop';
     item: PrintQueueItem;
   } | null>(null);
+  const [selectedItems, setSelectedItems] = useState<number[]>([]);
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
   const [historySortBy, setHistorySortBy] = useState<'date' | 'name' | 'printer'>(() => {
     const saved = localStorage.getItem('queue.historySortBy');
     return (saved as 'date' | 'name' | 'printer') || 'date';
@@ -473,6 +697,38 @@ export function QueuePage() {
     onError: () => showToast('Failed to clear history', 'error'),
   });
 
+  const bulkUpdateMutation = useMutation({
+    mutationFn: (data: PrintQueueBulkUpdate) => api.bulkUpdateQueue(data),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['queue'] });
+      setSelectedItems([]);
+      setShowBulkEditModal(false);
+      showToast(result.message);
+    },
+    onError: () => showToast('Failed to update items', 'error'),
+  });
+
+  const bulkCancelMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      for (const id of ids) {
+        await api.cancelQueueItem(id);
+      }
+      return ids.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['queue'] });
+      setSelectedItems([]);
+      showToast(`Cancelled ${count} item${count !== 1 ? 's' : ''}`);
+    },
+    onError: () => showToast('Failed to cancel items', 'error'),
+  });
+
+  const handleToggleSelect = (id: number) => {
+    setSelectedItems(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
   const pendingItems = useMemo(() => {
     const items = queue?.filter(i => i.status === 'pending') || [];
 
@@ -502,6 +758,16 @@ export function QueuePage() {
       return pendingSortAsc ? cmp : -cmp;
     });
   }, [queue, pendingSortBy, pendingSortAsc]);
+
+  const handleSelectAll = () => {
+    const allPendingIds = pendingItems.map(i => i.id);
+    if (selectedItems.length === allPendingIds.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(allPendingIds);
+    }
+  };
+
   const activeItems = queue?.filter(i => i.status === 'printing') || [];
   const historyItems = useMemo(() => {
     const items = queue?.filter(i => ['completed', 'failed', 'skipped', 'cancelled'].includes(i.status)) || [];
@@ -655,6 +921,8 @@ export function QueuePage() {
             variant="secondary"
             size="sm"
             onClick={() => setShowClearHistoryConfirm(true)}
+            disabled={!hasPermission('queue:delete')}
+            title={!hasPermission('queue:delete') ? 'You do not have permission to clear history' : undefined}
           >
             <Trash2 className="w-4 h-4" />
             Clear History
@@ -694,6 +962,7 @@ export function QueuePage() {
                     onRequeue={() => {}}
                     onStart={() => {}}
                     timeFormat={timeFormat}
+                    hasPermission={hasPermission}
                   />
                 ))}
               </div>
@@ -736,6 +1005,54 @@ export function QueuePage() {
                   </Button>
                 </div>
               </div>
+
+              {/* Bulk action toolbar */}
+              <div className="flex items-center gap-3 mb-4 p-3 bg-bambu-dark rounded-lg">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSelectAll}
+                  className="flex items-center gap-2"
+                >
+                  {selectedItems.length === pendingItems.length && pendingItems.length > 0 ? (
+                    <CheckSquare className="w-4 h-4 text-bambu-green" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                  {selectedItems.length === pendingItems.length && pendingItems.length > 0 ? 'Deselect All' : 'Select All'}
+                </Button>
+                {selectedItems.length > 0 && (
+                  <>
+                    <span className="text-sm text-bambu-gray">
+                      {selectedItems.length} selected
+                    </span>
+                    <div className="h-4 w-px bg-bambu-dark-tertiary" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowBulkEditModal(true)}
+                      className="flex items-center gap-2 text-bambu-green hover:text-bambu-green-light"
+                      disabled={!hasPermission('queue:update')}
+                      title={!hasPermission('queue:update') ? 'You do not have permission to edit queue items' : undefined}
+                    >
+                      <Pencil className="w-4 h-4" />
+                      Edit Selected
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => bulkCancelMutation.mutate(selectedItems)}
+                      className="flex items-center gap-2 text-red-400 hover:text-red-300"
+                      disabled={bulkCancelMutation.isPending || !hasPermission('queue:delete')}
+                      title={!hasPermission('queue:delete') ? 'You do not have permission to cancel queue items' : undefined}
+                    >
+                      <X className="w-4 h-4" />
+                      Cancel Selected
+                    </Button>
+                  </>
+                )}
+              </div>
+
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -758,6 +1075,9 @@ export function QueuePage() {
                         onRequeue={() => {}}
                         onStart={() => startMutation.mutate(item.id)}
                         timeFormat={timeFormat}
+                        isSelected={selectedItems.includes(item.id)}
+                        onToggleSelect={() => handleToggleSelect(item.id)}
+                        hasPermission={hasPermission}
                       />
                     ))}
                   </div>
@@ -811,6 +1131,7 @@ export function QueuePage() {
                     onRequeue={() => setRequeueItem(item)}
                     onStart={() => {}}
                     timeFormat={timeFormat}
+                    hasPermission={hasPermission}
                   />
                 ))}
               </div>
@@ -889,6 +1210,21 @@ export function QueuePage() {
             setShowClearHistoryConfirm(false);
           }}
           onCancel={() => setShowClearHistoryConfirm(false)}
+        />
+      )}
+
+      {/* Bulk Edit Modal */}
+      {showBulkEditModal && (
+        <BulkEditModal
+          selectedCount={selectedItems.length}
+          printers={printers?.map(p => ({ id: p.id, name: p.name })) || []}
+          onSave={(data) => {
+            if (Object.keys(data).length > 0) {
+              bulkUpdateMutation.mutate({ item_ids: selectedItems, ...data });
+            }
+          }}
+          onClose={() => setShowBulkEditModal(false)}
+          isSaving={bulkUpdateMutation.isPending}
         />
       )}
     </div>

@@ -41,6 +41,9 @@ import {
   GitCompare,
   Loader2,
   FolderKanban,
+  ChevronLeft,
+  ChevronRight,
+  Settings,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { openInSlicer } from '../utils/slicer';
@@ -64,7 +67,9 @@ import { ProjectPageModal } from '../components/ProjectPageModal';
 import { TimelapseViewer } from '../components/TimelapseViewer';
 import { CompareArchivesModal } from '../components/CompareArchivesModal';
 import { PendingUploadsPanel } from '../components/PendingUploadsPanel';
+import { TagManagementModal } from '../components/TagManagementModal';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -118,6 +123,7 @@ function ArchiveCard({
 
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { hasPermission } = useAuth();
   const isMobile = useIsMobile();
   const [showViewer, setShowViewer] = useState(false);
   const [showReprint, setShowReprint] = useState(false);
@@ -133,8 +139,22 @@ function ArchiveCard({
   const [showDeleteSource3mfConfirm, setShowDeleteSource3mfConfirm] = useState(false);
   const [showDeleteF3dConfirm, setShowDeleteF3dConfirm] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [currentPlateIndex, setCurrentPlateIndex] = useState<number | null>(null);
+  const [showPlateNav, setShowPlateNav] = useState(false);
   const source3mfInputRef = useRef<HTMLInputElement>(null);
   const f3dInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch plates data for multi-plate browsing (lazy - only when hovering)
+  const { data: platesData } = useQuery({
+    queryKey: ['archive-plates', archive.id],
+    queryFn: () => api.getArchivePlates(archive.id),
+    enabled: showPlateNav, // Only fetch when user hovers to see navigation
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  const plates = platesData?.plates ?? [];
+  const isMultiPlate = platesData?.is_multi_plate ?? false;
+  const displayPlateIndex = currentPlateIndex ?? 0;
 
   const source3mfUploadMutation = useMutation({
     mutationFn: (file: File) => api.uploadSource3mf(archive.id, file),
@@ -266,11 +286,15 @@ function ArchiveCard({
         label: 'Print',
         icon: <Printer className="w-4 h-4" />,
         onClick: () => setShowReprint(true),
+        disabled: !hasPermission('archives:reprint'),
+        title: !hasPermission('archives:reprint') ? 'You do not have permission to reprint' : undefined,
       },
       {
         label: 'Schedule',
         icon: <Calendar className="w-4 h-4" />,
         onClick: () => setShowSchedule(true),
+        disabled: !hasPermission('queue:create'),
+        title: !hasPermission('queue:create') ? 'You do not have permission to add to queue' : undefined,
       },
       {
         label: 'Open in Bambu Studio',
@@ -293,10 +317,13 @@ function ArchiveCard({
       },
     ]),
     {
-      label: 'View on MakerWorld',
+      label: archive.external_url ? 'External Link' : 'View on MakerWorld',
       icon: <Globe className="w-4 h-4" />,
-      onClick: () => archive.makerworld_url && window.open(archive.makerworld_url, '_blank'),
-      disabled: !archive.makerworld_url,
+      onClick: () => {
+        const url = archive.external_url || archive.makerworld_url;
+        if (url) window.open(url, '_blank');
+      },
+      disabled: !archive.external_url && !archive.makerworld_url,
     },
     { label: '', divider: true, onClick: () => {} },
     {
@@ -314,7 +341,8 @@ function ArchiveCard({
       label: 'Scan for Timelapse',
       icon: <ScanSearch className="w-4 h-4" />,
       onClick: () => timelapseScanMutation.mutate(),
-      disabled: !archive.printer_id || !!archive.timelapse_path || timelapseScanMutation.isPending,
+      disabled: !archive.printer_id || !!archive.timelapse_path || timelapseScanMutation.isPending || !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     },
     { label: '', divider: true, onClick: () => {} },
     {
@@ -330,22 +358,30 @@ function ArchiveCard({
           source3mfInputRef.current?.click();
         }
       },
+      disabled: !archive.source_3mf_path && !hasPermission('archives:update'),
+      title: !archive.source_3mf_path && !hasPermission('archives:update') ? 'You do not have permission to upload files' : undefined,
     },
     ...(archive.source_3mf_path ? [{
       label: 'Replace Source 3MF',
       icon: <Upload className="w-4 h-4" />,
       onClick: () => source3mfInputRef.current?.click(),
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     },
     {
       label: 'Remove Source 3MF',
       icon: <Trash2 className="w-4 h-4" />,
       onClick: () => setShowDeleteSource3mfConfirm(true),
       danger: true,
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     }] : []),
     {
       label: archive.f3d_path ? 'Replace F3D' : 'Upload F3D',
       icon: <Box className="w-4 h-4" />,
       onClick: () => f3dInputRef.current?.click(),
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     },
     ...(archive.f3d_path ? [{
       label: 'Download F3D',
@@ -362,6 +398,8 @@ function ArchiveCard({
       icon: <Trash2 className="w-4 h-4" />,
       onClick: () => setShowDeleteF3dConfirm(true),
       danger: true,
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     }] : []),
     { label: '', divider: true, onClick: () => {} },
     {
@@ -373,6 +411,8 @@ function ArchiveCard({
         link.download = `${archive.print_name || archive.filename}.3mf`;
         link.click();
       },
+      disabled: !hasPermission('archives:read'),
+      title: !hasPermission('archives:read') ? 'You do not have permission to download archives' : undefined,
     },
     {
       label: 'Copy Download Link',
@@ -385,6 +425,8 @@ function ArchiveCard({
           showToast('Failed to copy link', 'error');
         });
       },
+      disabled: !hasPermission('archives:read'),
+      title: !hasPermission('archives:read') ? 'You do not have permission to copy download links' : undefined,
     },
     {
       label: 'QR Code',
@@ -407,11 +449,15 @@ function ArchiveCard({
       label: archive.is_favorite ? 'Remove from Favorites' : 'Add to Favorites',
       icon: <Star className={`w-4 h-4 ${archive.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`} />,
       onClick: () => favoriteMutation.mutate(),
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     },
     {
       label: 'Edit',
       icon: <Pencil className="w-4 h-4" />,
       onClick: () => setShowEdit(true),
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     },
     ...(archive.project_id && archive.project_name ? [{
       label: `Go to Project: ${archive.project_name}`,
@@ -422,6 +468,8 @@ function ArchiveCard({
       label: 'Add to Project',
       icon: <FolderKanban className="w-4 h-4" />,
       onClick: () => {},
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
       submenu: (() => {
         const items: ContextMenuItem[] = [];
 
@@ -431,6 +479,7 @@ function ArchiveCard({
             label: 'Remove from Project',
             icon: <X className="w-4 h-4" />,
             onClick: () => assignProjectMutation.mutate(null),
+            disabled: !hasPermission('archives:update'),
           });
         }
 
@@ -457,7 +506,7 @@ function ArchiveCard({
                 label: p.name,
                 icon: <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.color || '#888' }} />,
                 onClick: () => assignProjectMutation.mutate(p.id),
-                disabled: archive.project_id === p.id,
+                disabled: archive.project_id === p.id || !hasPermission('archives:update'),
               });
             });
           }
@@ -477,6 +526,8 @@ function ArchiveCard({
       icon: <Trash2 className="w-4 h-4" />,
       onClick: () => setShowDeleteConfirm(true),
       danger: true,
+      disabled: !hasPermission('archives:delete'),
+      title: !hasPermission('archives:delete') ? 'You do not have permission to delete archives' : undefined,
     },
   ];
 
@@ -502,11 +553,19 @@ function ArchiveCard({
         </button>
       )}
 
-      {/* Thumbnail */}
-      <div className="aspect-video bg-bambu-dark relative flex-shrink-0 overflow-hidden rounded-t-xl">
+      {/* Thumbnail with plate navigation */}
+      <div
+        className="aspect-video bg-bambu-dark relative flex-shrink-0 overflow-hidden rounded-t-xl"
+        onMouseEnter={() => setShowPlateNav(true)}
+        onMouseLeave={() => setShowPlateNav(false)}
+      >
         {archive.thumbnail_path ? (
           <img
-            src={api.getArchiveThumbnail(archive.id)}
+            src={
+              currentPlateIndex !== null && plates.length > 0
+                ? api.getArchivePlateThumbnail(archive.id, plates[displayPlateIndex]?.index ?? 0)
+                : api.getArchiveThumbnail(archive.id)
+            }
             alt={archive.print_name || archive.filename}
             className="w-full h-full object-cover"
           />
@@ -514,6 +573,63 @@ function ArchiveCard({
           <div className="w-full h-full flex items-center justify-center">
             <Image className="w-12 h-12 text-bambu-dark-tertiary" />
           </div>
+        )}
+        {/* Plate navigation - only show for multi-plate archives */}
+        {isMultiPlate && plates.length > 1 && (
+          <>
+            {/* Left arrow */}
+            <button
+              className={`absolute left-1 top-1/2 -translate-y-1/2 p-1 rounded-full bg-black/60 hover:bg-black/80 transition-all ${
+                isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentPlateIndex((prev) => {
+                  const current = prev ?? 0;
+                  return current > 0 ? current - 1 : plates.length - 1;
+                });
+              }}
+              title="Previous plate"
+            >
+              <ChevronLeft className="w-4 h-4 text-white" />
+            </button>
+            {/* Right arrow */}
+            <button
+              className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-full bg-black/60 hover:bg-black/80 transition-all ${
+                isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentPlateIndex((prev) => {
+                  const current = prev ?? 0;
+                  return current < plates.length - 1 ? current + 1 : 0;
+                });
+              }}
+              title="Next plate"
+            >
+              <ChevronRight className="w-4 h-4 text-white" />
+            </button>
+            {/* Dots indicator */}
+            <div
+              className={`absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1 px-2 py-1 rounded-full bg-black/50 transition-all ${
+                isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+            >
+              {plates.map((plate, idx) => (
+                <button
+                  key={plate.index}
+                  className={`w-2 h-2 rounded-full transition-colors ${
+                    idx === displayPlateIndex ? 'bg-bambu-green' : 'bg-white/50 hover:bg-white/80'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentPlateIndex(idx);
+                  }}
+                  title={plate.name || `Plate ${plate.index}`}
+                />
+              ))}
+            </div>
+          </>
         )}
         {/* Context menu button - visible on mobile, shows on hover for desktop */}
         <button
@@ -531,19 +647,26 @@ function ArchiveCard({
         </button>
         {/* Favorite star */}
         <button
-          className="absolute top-2 right-2 p-1 rounded bg-black/50 hover:bg-black/70 transition-colors"
+          className={`absolute top-2 right-2 p-1 rounded transition-colors ${
+            hasPermission('archives:update')
+              ? 'bg-black/50 hover:bg-black/70'
+              : 'bg-black/30 cursor-not-allowed'
+          }`}
           onClick={(e) => {
             e.stopPropagation();
-            favoriteMutation.mutate();
+            if (hasPermission('archives:update')) {
+              favoriteMutation.mutate();
+            }
           }}
-          title={archive.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+          disabled={!hasPermission('archives:update')}
+          title={!hasPermission('archives:update') ? 'You do not have permission to update archives' : (archive.is_favorite ? 'Remove from favorites' : 'Add to favorites')}
         >
           <Star
-            className={`w-5 h-5 ${archive.is_favorite ? 'text-yellow-400 fill-yellow-400' : 'text-white'}`}
+            className={`w-5 h-5 ${archive.is_favorite ? 'text-yellow-400 fill-yellow-400' : 'text-white'} ${!hasPermission('archives:update') ? 'opacity-50' : ''}`}
           />
         </button>
         {(archive.status === 'failed' || archive.status === 'aborted') && (
-          <div className="absolute top-2 left-12 px-2 py-1 rounded text-xs bg-red-500/80 text-white">
+          <div className="absolute top-2 left-12 px-2 py-1 rounded text-xs bg-status-error/80 text-white">
             {archive.status === 'aborted' ? 'cancelled' : 'failed'}
           </div>
         )}
@@ -713,6 +836,12 @@ function ArchiveCard({
               {archive.object_count} object{archive.object_count > 1 ? 's' : ''}
             </div>
           )}
+          {archive.sliced_for_model && (
+            <div className="flex items-center gap-1.5 text-bambu-gray" title={`Sliced for ${archive.sliced_for_model}`}>
+              <Printer className="w-3 h-3" />
+              {archive.sliced_for_model}
+            </div>
+          )}
           {archive.filament_type && (
             <div className="flex items-center gap-1.5 col-span-2">
               <span className="text-bambu-gray text-xs">{archive.filament_type}</span>
@@ -773,6 +902,8 @@ function ArchiveCard({
                 size="sm"
                 className="flex-1 min-w-0"
                 onClick={() => setShowReprint(true)}
+                disabled={!hasPermission('archives:reprint')}
+                title={!hasPermission('archives:reprint') ? 'You do not have permission to reprint' : undefined}
               >
                 <Printer className="w-3 h-3 flex-shrink-0" />
                 <span className="hidden sm:inline">Reprint</span>
@@ -812,11 +943,20 @@ function ArchiveCard({
             variant="secondary"
             size="sm"
             className="min-w-0 p-1 sm:p-1.5"
-            onClick={() => archive.makerworld_url && window.open(archive.makerworld_url, '_blank')}
-            disabled={!archive.makerworld_url}
-            title={archive.makerworld_url ? `MakerWorld: ${archive.designer || 'View project'}` : 'Not from MakerWorld'}
+            onClick={() => {
+              const url = archive.external_url || archive.makerworld_url;
+              if (url) window.open(url, '_blank');
+            }}
+            disabled={!archive.external_url && !archive.makerworld_url}
+            title={
+              archive.external_url
+                ? 'External Link'
+                : archive.makerworld_url
+                  ? `MakerWorld: ${archive.designer || 'View project'}`
+                  : 'No external link'
+            }
           >
-            <Globe className={`w-3 h-3 sm:w-4 sm:h-4 ${!archive.makerworld_url ? 'opacity-20' : ''}`} />
+            <Globe className={`w-3 h-3 sm:w-4 sm:h-4 ${!archive.external_url && !archive.makerworld_url ? 'opacity-20' : ''}`} />
           </Button>
           <Button
             variant="secondary"
@@ -846,7 +986,8 @@ function ArchiveCard({
             size="sm"
             className="min-w-0 p-1 sm:p-1.5"
             onClick={() => setShowEdit(true)}
-            title="Edit"
+            disabled={!hasPermission('archives:update')}
+            title={!hasPermission('archives:update') ? 'You do not have permission to edit archives' : 'Edit'}
           >
             <Pencil className="w-3 h-3 sm:w-4 sm:h-4" />
           </Button>
@@ -855,7 +996,8 @@ function ArchiveCard({
             size="sm"
             className="min-w-0 p-1 sm:p-1.5"
             onClick={() => setShowDeleteConfirm(true)}
-            title="Delete"
+            disabled={!hasPermission('archives:delete')}
+            title={!hasPermission('archives:delete') ? 'You do not have permission to delete archives' : 'Delete'}
           >
             <Trash2 className="w-3 h-3 sm:w-4 sm:h-4 text-red-400" />
           </Button>
@@ -1112,6 +1254,7 @@ function ArchiveListRow({
 }) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { hasPermission } = useAuth();
   const [showEdit, setShowEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showReprint, setShowReprint] = useState(false);
@@ -1256,11 +1399,15 @@ function ArchiveListRow({
         label: 'Print',
         icon: <Printer className="w-4 h-4" />,
         onClick: () => setShowReprint(true),
+        disabled: !hasPermission('archives:reprint'),
+        title: !hasPermission('archives:reprint') ? 'You do not have permission to reprint' : undefined,
       },
       {
         label: 'Schedule',
         icon: <Calendar className="w-4 h-4" />,
         onClick: () => setShowSchedule(true),
+        disabled: !hasPermission('queue:create'),
+        title: !hasPermission('queue:create') ? 'You do not have permission to add to queue' : undefined,
       },
       {
         label: 'Open in Bambu Studio',
@@ -1283,10 +1430,13 @@ function ArchiveListRow({
       },
     ]),
     {
-      label: 'View on MakerWorld',
+      label: archive.external_url ? 'External Link' : 'View on MakerWorld',
       icon: <Globe className="w-4 h-4" />,
-      onClick: () => archive.makerworld_url && window.open(archive.makerworld_url, '_blank'),
-      disabled: !archive.makerworld_url,
+      onClick: () => {
+        const url = archive.external_url || archive.makerworld_url;
+        if (url) window.open(url, '_blank');
+      },
+      disabled: !archive.external_url && !archive.makerworld_url,
     },
     { label: '', divider: true, onClick: () => {} },
     {
@@ -1304,7 +1454,8 @@ function ArchiveListRow({
       label: 'Scan for Timelapse',
       icon: <ScanSearch className="w-4 h-4" />,
       onClick: () => timelapseScanMutation.mutate(),
-      disabled: !archive.printer_id || !!archive.timelapse_path || timelapseScanMutation.isPending,
+      disabled: !archive.printer_id || !!archive.timelapse_path || timelapseScanMutation.isPending || !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     },
     { label: '', divider: true, onClick: () => {} },
     {
@@ -1320,22 +1471,30 @@ function ArchiveListRow({
           source3mfInputRef.current?.click();
         }
       },
+      disabled: !archive.source_3mf_path && !hasPermission('archives:update'),
+      title: !archive.source_3mf_path && !hasPermission('archives:update') ? 'You do not have permission to upload files' : undefined,
     },
     ...(archive.source_3mf_path ? [{
       label: 'Replace Source 3MF',
       icon: <Upload className="w-4 h-4" />,
       onClick: () => source3mfInputRef.current?.click(),
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     },
     {
       label: 'Remove Source 3MF',
       icon: <Trash2 className="w-4 h-4" />,
       onClick: () => setShowDeleteSource3mfConfirm(true),
       danger: true,
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     }] : []),
     {
       label: archive.f3d_path ? 'Replace F3D' : 'Upload F3D',
       icon: <Box className="w-4 h-4" />,
       onClick: () => f3dInputRef.current?.click(),
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     },
     ...(archive.f3d_path ? [{
       label: 'Download F3D',
@@ -1352,6 +1511,8 @@ function ArchiveListRow({
       icon: <Trash2 className="w-4 h-4" />,
       onClick: () => setShowDeleteF3dConfirm(true),
       danger: true,
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     }] : []),
     { label: '', divider: true, onClick: () => {} },
     {
@@ -1363,6 +1524,8 @@ function ArchiveListRow({
         link.download = `${archive.print_name || archive.filename}.3mf`;
         link.click();
       },
+      disabled: !hasPermission('archives:read'),
+      title: !hasPermission('archives:read') ? 'You do not have permission to download archives' : undefined,
     },
     {
       label: 'Copy Download Link',
@@ -1375,6 +1538,8 @@ function ArchiveListRow({
           showToast('Failed to copy link', 'error');
         });
       },
+      disabled: !hasPermission('archives:read'),
+      title: !hasPermission('archives:read') ? 'You do not have permission to copy download links' : undefined,
     },
     {
       label: 'QR Code',
@@ -1397,11 +1562,15 @@ function ArchiveListRow({
       label: archive.is_favorite ? 'Remove from Favorites' : 'Add to Favorites',
       icon: <Star className={`w-4 h-4 ${archive.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`} />,
       onClick: () => favoriteMutation.mutate(),
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     },
     {
       label: 'Edit',
       icon: <Pencil className="w-4 h-4" />,
       onClick: () => setShowEdit(true),
+      disabled: !hasPermission('archives:update'),
+      title: !hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined,
     },
     ...(archive.project_id && archive.project_name ? [{
       label: `Go to Project: ${archive.project_name}`,
@@ -1462,6 +1631,8 @@ function ArchiveListRow({
       icon: <Trash2 className="w-4 h-4" />,
       onClick: () => setShowDeleteConfirm(true),
       danger: true,
+      disabled: !hasPermission('archives:delete'),
+      title: !hasPermission('archives:delete') ? 'You do not have permission to delete archives' : undefined,
     },
   ];
 
@@ -1516,9 +1687,20 @@ function ArchiveListRow({
               </Link>
             )}
           </div>
-          {archive.filament_type && (
+          {(archive.filament_type || archive.sliced_for_model) && (
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-xs text-bambu-gray">{archive.filament_type}</span>
+              {archive.sliced_for_model && (
+                <span className="text-xs text-bambu-gray flex items-center gap-1" title={`Sliced for ${archive.sliced_for_model}`}>
+                  <Printer className="w-2.5 h-2.5" />
+                  {archive.sliced_for_model}
+                </span>
+              )}
+              {archive.sliced_for_model && archive.filament_type && (
+                <span className="text-bambu-gray/50">·</span>
+              )}
+              {archive.filament_type && (
+                <span className="text-xs text-bambu-gray">{archive.filament_type}</span>
+              )}
               {archive.filament_color && (
                 <div className="flex items-center gap-0.5 flex-wrap">
                   {archive.filament_color.split(',').map((color, i) => (
@@ -1556,12 +1738,12 @@ function ArchiveListRow({
           >
             <ExternalLink className="w-4 h-4" />
           </Button>
-          {archive.makerworld_url && (
+          {(archive.external_url || archive.makerworld_url) && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => window.open(archive.makerworld_url!, '_blank')}
-              title="MakerWorld"
+              onClick={() => window.open((archive.external_url || archive.makerworld_url)!, '_blank')}
+              title={archive.external_url ? 'External Link' : 'MakerWorld'}
             >
               <Globe className="w-4 h-4" />
             </Button>
@@ -1583,7 +1765,8 @@ function ArchiveListRow({
             variant="ghost"
             size="sm"
             onClick={() => setShowEdit(true)}
-            title="Edit"
+            disabled={!hasPermission('archives:update')}
+            title={!hasPermission('archives:update') ? 'You do not have permission to edit archives' : 'Edit'}
           >
             <Pencil className="w-4 h-4" />
           </Button>
@@ -1591,7 +1774,8 @@ function ArchiveListRow({
             variant="ghost"
             size="sm"
             onClick={() => setShowDeleteConfirm(true)}
-            title="Delete"
+            disabled={!hasPermission('archives:delete')}
+            title={!hasPermission('archives:delete') ? 'You do not have permission to delete archives' : 'Delete'}
           >
             <Trash2 className="w-4 h-4 text-red-400" />
           </Button>
@@ -1845,6 +2029,7 @@ const collections: { id: Collection; label: string; icon: React.ReactNode }[] = 
 export function ArchivesPage() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { hasPermission } = useAuth();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [filterPrinter, setFilterPrinter] = useState<number | null>(() => {
@@ -1893,6 +2078,7 @@ export function ArchivesPage() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
+  const [showTagManagement, setShowTagManagement] = useState(false);
   const [highlightedArchiveId, setHighlightedArchiveId] = useState<number | null>(null);
 
   // Clear highlight after 5 seconds and scroll to highlighted element
@@ -2259,6 +2445,8 @@ export function ArchivesPage() {
             variant="secondary"
             size="sm"
             onClick={() => setShowBatchTag(true)}
+            disabled={!hasPermission('archives:update')}
+            title={!hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined}
           >
             <Tag className="w-4 h-4" />
             Tags
@@ -2267,6 +2455,8 @@ export function ArchivesPage() {
             variant="secondary"
             size="sm"
             onClick={() => setShowBatchProject(true)}
+            disabled={!hasPermission('archives:update')}
+            title={!hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined}
           >
             <FolderKanban className="w-4 h-4" />
             Project
@@ -2274,6 +2464,8 @@ export function ArchivesPage() {
           <Button
             variant="secondary"
             size="sm"
+            disabled={!hasPermission('archives:update')}
+            title={!hasPermission('archives:update') ? 'You do not have permission to update archives' : undefined}
             onClick={() => {
               const ids = Array.from(selectedIds);
               Promise.all(ids.map(id => api.toggleFavorite(id)))
@@ -2293,6 +2485,8 @@ export function ArchivesPage() {
             size="sm"
             className="bg-red-500 hover:bg-red-600"
             onClick={() => setShowBulkDeleteConfirm(true)}
+            disabled={!hasPermission('archives:delete')}
+            title={!hasPermission('archives:delete') ? 'You do not have permission to delete archives' : undefined}
           >
             <Trash2 className="w-4 h-4" />
             Delete
@@ -2414,7 +2608,11 @@ export function ArchivesPage() {
               Select
             </Button>
           )}
-          <Button onClick={() => setShowUpload(true)}>
+          <Button
+            onClick={() => setShowUpload(true)}
+            disabled={!hasPermission('archives:create')}
+            title={!hasPermission('archives:create') ? 'You do not have permission to create archives' : undefined}
+          >
             <Upload className="w-4 h-4" />
             Upload 3MF
           </Button>
@@ -2524,6 +2722,13 @@ export function ArchivesPage() {
                     </option>
                   ))}
                 </select>
+                <button
+                  onClick={() => setShowTagManagement(true)}
+                  className="p-2 rounded-lg bg-bambu-dark border border-bambu-dark-tertiary text-bambu-gray hover:text-white hover:border-bambu-green transition-colors"
+                  title="Manage Tags"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
               </div>
             )}
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -2659,7 +2864,7 @@ export function ArchivesPage() {
             <ArchiveCard
               key={archive.id}
               archive={archive}
-              printerName={archive.printer_id ? printerMap.get(archive.printer_id) || 'Unknown' : 'No Printer'}
+              printerName={archive.printer_id ? printerMap.get(archive.printer_id) || 'Unknown' : (archive.sliced_for_model ? `Sliced for ${archive.sliced_for_model}` : 'No Printer')}
               isSelected={selectedIds.has(archive.id)}
               onSelect={toggleSelect}
               selectionMode={selectionMode}
@@ -2686,7 +2891,7 @@ export function ArchivesPage() {
               <ArchiveListRow
                 key={archive.id}
                 archive={archive}
-                printerName={archive.printer_id ? printerMap.get(archive.printer_id) || 'Unknown' : 'No Printer'}
+                printerName={archive.printer_id ? printerMap.get(archive.printer_id) || 'Unknown' : (archive.sliced_for_model ? `Sliced for ${archive.sliced_for_model}` : 'No Printer')}
                 isSelected={selectedIds.has(archive.id)}
                 onSelect={toggleSelect}
                 selectionMode={selectionMode}
@@ -2751,6 +2956,11 @@ export function ArchivesPage() {
             setIsSelectionMode(false);
           }}
         />
+      )}
+
+      {/* Tag Management Modal */}
+      {showTagManagement && (
+        <TagManagementModal onClose={() => setShowTagManagement(false)} />
       )}
     </div>
   );
