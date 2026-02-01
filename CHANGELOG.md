@@ -4,6 +4,12 @@ All notable changes to Bambuddy will be documented in this file.
 
 ## [0.1.7b] - Not released
 
+### Enhancements
+- **Streaming Overlay Improvements** (Issue #164):
+  - **Configurable FPS**: Add `?fps=30` parameter to control camera frame rate (1-30, default 15)
+  - **Status-only mode**: Add `?camera=false` parameter to hide camera and show only status overlay on black background
+  - Increased default camera FPS from 10 to 15 for smoother video across all camera views
+
 ## [0.1.6-final] - 2026-01-31
 
 ### New Features
