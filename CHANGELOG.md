@@ -5,6 +5,10 @@ All notable changes to Bambuddy will be documented in this file.
 ## [0.1.7b] - Not released
 
 ### Enhancements
+- **Schedule Button on Archive Cards** (Issue #208):
+  - Added "Schedule" button next to "Reprint" on archive cards for quick access to print scheduling
+  - Previously only available in the context menu (right-click)
+  - Respects `queue:create` permission for users with restricted access
 - **Streaming Overlay Improvements** (Issue #164):
   - **Configurable FPS**: Add `?fps=30` parameter to control camera frame rate (1-30, default 15)
   - **Status-only mode**: Add `?camera=false` parameter to hide camera and show only status overlay on black background
@@ -15,7 +19,7 @@ All notable changes to Bambuddy will be documented in this file.
   - Portable backups: works across different installations and data directories
   - Faster backup/restore: direct file copy instead of JSON export/import
   - Progress indicator and navigation blocking during backup/restore operations
-  - Legacy JSON-based backup/restore still available via `/backup-legacy` and `/restore-legacy` endpoints
+  - Removed ~2000 lines of legacy JSON-based backup/restore code
 
 ### Fixes
 - **Library thumbnails missing after restore** - Fixed library files using absolute paths that break after restore on different systems:

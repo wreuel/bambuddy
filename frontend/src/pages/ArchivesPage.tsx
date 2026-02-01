@@ -911,6 +911,17 @@ function ArchiveCard({
               <Button
                 variant="secondary"
                 size="sm"
+                className="flex-1 min-w-0"
+                onClick={() => setShowSchedule(true)}
+                disabled={!hasPermission('queue:create')}
+                title={!hasPermission('queue:create') ? 'You do not have permission to add to queue' : 'Schedule Print'}
+              >
+                <Calendar className="w-3 h-3 flex-shrink-0" />
+                <span className="hidden sm:inline">Schedule</span>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 className="min-w-0 p-1 sm:p-1.5"
                 onClick={() => {
                   const filename = archive.print_name || archive.filename || 'model';
