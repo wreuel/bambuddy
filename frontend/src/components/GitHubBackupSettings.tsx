@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Github,
@@ -96,6 +97,7 @@ function formatRelativeTime(dateStr: string | null): string {
 export function GitHubBackupSettings() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { t } = useTranslation();
 
   // Local state for form
   const [repoUrl, setRepoUrl] = useState('');
@@ -765,6 +767,9 @@ export function GitHubBackupSettings() {
                 <p className="text-white">Restore Backup</p>
                 <p className="text-sm text-bambu-gray">
                   Replace all data from a backup file
+                </p>
+                <p className="text-xs text-bambu-gray-light mt-1">
+                  {t('backup.restoreNote')}
                 </p>
               </div>
               <input

@@ -2252,6 +2252,7 @@ export default {
     restoreSuccess: 'Backup restored successfully',
     backupFailed: 'Backup failed',
     restoreFailed: 'Restore failed',
+    restoreNote: 'Virtual Printer will be restarted after restore',
   },
 
   // Tags

@@ -1,4 +1,5 @@
 import io
+import logging
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,8 @@ from backend.app.core.permissions import Permission
 from backend.app.models.settings import Settings
 from backend.app.models.user import User
 from backend.app.schemas.settings import AppSettings, AppSettingsUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -311,6 +314,7 @@ async def restore_backup(
     from fastapi import HTTPException
 
     from backend.app.core.database import close_all_connections
+    from backend.app.services.virtual_printer import virtual_printer_manager
 
     base_dir = app_settings.base_dir
     db_path = Path(app_settings.database_url.replace("sqlite+aiosqlite:///", ""))
@@ -336,13 +340,18 @@ async def restore_backup(
         if not backup_db.exists():
             raise HTTPException(400, "Invalid backup: missing bambuddy.db")
 
-        # 3. Close current database connections
+        # 3. Stop virtual printer if running (releases file locks)
+        vp_was_enabled = virtual_printer_manager.is_enabled
+        if vp_was_enabled:
+            await virtual_printer_manager.configure(enabled=False)
+
+        # 4. Close current database connections
         await close_all_connections()
 
-        # 4. Replace database
+        # 5. Replace database
         shutil.copy2(backup_db, db_path)
 
-        # 5. Replace data directories
+        # 6. Replace data directories
         dirs_to_restore = [
             ("archive", base_dir / "archive"),
             ("virtual_printer", base_dir / "virtual_printer"),
@@ -358,7 +367,14 @@ async def restore_backup(
                     shutil.rmtree(dest_dir)
                 shutil.copytree(src_dir, dest_dir)
 
-        # 6. Note: Database connection will be reinitialized on restart
+        # 7. Restart virtual printer if it was running before
+        if vp_was_enabled:
+            try:
+                await virtual_printer_manager.configure(enabled=True)
+            except Exception as e:
+                logger.warning(f"Failed to restart virtual printer after restore: {e}")
+
+        # 8. Note: Database connection will be reinitialized on restart
         # The application should be restarted after restore
 
         return {

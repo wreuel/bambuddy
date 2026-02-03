@@ -2252,6 +2252,7 @@ export default {
     restoreSuccess: 'Sicherung erfolgreich wiederhergestellt',
     backupFailed: 'Sicherung fehlgeschlagen',
     restoreFailed: 'Wiederherstellung fehlgeschlagen',
+    restoreNote: 'Virtueller Drucker wird nach der Wiederherstellung neu gestartet',
   },
 
   // Tags
