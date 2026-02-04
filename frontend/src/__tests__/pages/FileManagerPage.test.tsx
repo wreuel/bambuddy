@@ -614,4 +614,115 @@ describe('FileManagerPage', () => {
       });
     });
   });
+
+  describe('authentication-based UI changes', () => {
+    it('hides "Uploaded By" column and user filter when auth is disabled', async () => {
+      // Mock auth disabled (default)
+      server.use(
+        http.get('*/api/v1/auth/status', () => {
+          return HttpResponse.json({
+            auth_enabled: false,
+            requires_setup: false,
+          });
+        }),
+        http.get('/api/v1/library/files', () => {
+          return HttpResponse.json([
+            {
+              id: 1,
+              filename: 'test.3mf',
+              file_path: '/library/test.3mf',
+              file_size: 1048576,
+              file_type: '3mf',
+              folder_id: null,
+              thumbnail_path: null,
+              print_name: 'Test File',
+              print_time_seconds: 3600,
+              print_count: 0,
+              duplicate_count: 0,
+              created_at: '2024-01-01T00:00:00Z',
+              created_by_username: 'testuser',
+            },
+          ]);
+        })
+      );
+
+      render(<FileManagerPage />);
+
+      // Switch to list view to see the column headers
+      await waitFor(() => {
+        expect(screen.getByText('Test File')).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      const listViewButton = screen.getByRole('button', { name: /list/i });
+      await user.click(listViewButton);
+
+      // "Uploaded By" column header should not be present
+      await waitFor(() => {
+        expect(screen.queryByText('Uploaded By')).not.toBeInTheDocument();
+      });
+
+      // User filter dropdown should not be present
+      expect(screen.queryByPlaceholderText('Filter by user')).not.toBeInTheDocument();
+    });
+
+    it('shows "Uploaded By" column and user filter when auth is enabled', async () => {
+      // Mock auth enabled
+      server.use(
+        http.get('*/api/v1/auth/status', () => {
+          return HttpResponse.json({
+            auth_enabled: true,
+            requires_setup: false,
+          });
+        }),
+        http.get('/api/v1/library/files', () => {
+          return HttpResponse.json([
+            {
+              id: 1,
+              filename: 'test.3mf',
+              file_path: '/library/test.3mf',
+              file_size: 1048576,
+              file_type: '3mf',
+              folder_id: null,
+              thumbnail_path: null,
+              print_name: 'Test File',
+              print_time_seconds: 3600,
+              print_count: 0,
+              duplicate_count: 0,
+              created_at: '2024-01-01T00:00:00Z',
+              created_by_username: 'testuser',
+            },
+          ]);
+        }),
+        http.get('/api/v1/users/', () => {
+          return HttpResponse.json([
+            { id: 1, username: 'testuser' },
+            { id: 2, username: 'admin' },
+          ]);
+        })
+      );
+
+      render(<FileManagerPage />);
+
+      // Switch to list view to see the column headers
+      await waitFor(() => {
+        expect(screen.getByText('Test File')).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      const listViewButton = screen.getByRole('button', { name: /list/i });
+      await user.click(listViewButton);
+
+      // "Uploaded By" column header should be present
+      await waitFor(() => {
+        expect(screen.getByText('Uploaded By')).toBeInTheDocument();
+      });
+
+      // User filter dropdown should be present
+      expect(screen.getByPlaceholderText('Filter by user')).toBeInTheDocument();
+
+      // Username should be displayed in the column
+      expect(screen.getByText('testuser')).toBeInTheDocument();
+    });
+  });
 });
