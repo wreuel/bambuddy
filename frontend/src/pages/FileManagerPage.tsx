@@ -902,6 +902,7 @@ interface FileCardProps {
   file: LibraryFileListItem;
   isSelected: boolean;
   isMobile: boolean;
+  hasAnySelection: boolean;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
   onDownload: (id: number) => void;
@@ -916,7 +917,7 @@ interface FileCardProps {
   t: TFunction;
 }
 
-function FileCard({ file, isSelected, isMobile, onSelect, onDelete, onDownload, onAddToQueue, onPrint, onRename, onGenerateThumbnail, thumbnailVersion, hasPermission, canModify, authEnabled, t }: FileCardProps) {
+function FileCard({ file, isSelected, isMobile, hasAnySelection, onSelect, onDelete, onDownload, onAddToQueue, onPrint, onRename, onGenerateThumbnail, thumbnailVersion, hasPermission, canModify, authEnabled, t }: FileCardProps) {
   const [showActions, setShowActions] = useState(false);
 
   return (
@@ -995,7 +996,7 @@ function FileCard({ file, isSelected, isMobile, onSelect, onDelete, onDownload, 
           <>
             <div className="fixed inset-0 z-10" onClick={() => setShowActions(false)} />
             <div className="absolute right-0 bottom-8 z-20 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded-lg shadow-xl py-1 min-w-[140px]">
-              {onPrint && isSlicedFilename(file.filename) && (
+              {!hasAnySelection && onPrint && isSlicedFilename(file.filename) && (
                 <button
                   className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 ${
                     hasPermission('printers:control') ? 'text-bambu-green hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
@@ -1008,7 +1009,7 @@ function FileCard({ file, isSelected, isMobile, onSelect, onDelete, onDownload, 
                   {t('common.print')}
                 </button>
               )}
-              {onAddToQueue && isSlicedFilename(file.filename) && (
+              {!hasAnySelection && onAddToQueue && isSlicedFilename(file.filename) && (
                 <button
                   className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 ${
                     hasPermission('queue:create') ? 'text-white hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
@@ -1984,6 +1985,7 @@ export function FileManagerPage() {
                     file={file}
                     isSelected={selectedFiles.includes(file.id)}
                     isMobile={isMobile}
+                    hasAnySelection={selectedFiles.length > 0}
                     t={t}
                     onSelect={handleFileSelect}
                     onDelete={(id) => setDeleteConfirm({ type: 'file', id })}
@@ -2096,7 +2098,7 @@ export function FileManagerPage() {
                     <div className="text-sm text-bambu-gray">{file.print_count > 0 ? `${file.print_count}x` : '-'}</div>
                     {/* Actions */}
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      {isSlicedFilename(file.filename) && (
+                      {selectedFiles.length === 0 && isSlicedFilename(file.filename) && (
                         <>
                           <button
                             onClick={() => hasPermission('printers:control') && setPrintFile(file)}
