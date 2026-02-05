@@ -1833,7 +1833,8 @@ async def get_archive_capabilities(
 ):
     """Check what viewing capabilities are available for this 3MF file."""
     import json
-    import xml.etree.ElementTree as ET
+
+    import defusedxml.ElementTree as ET
 
     service = ArchiveService(db)
     archive = await service.get_archive(archive_id)
@@ -2113,7 +2114,7 @@ async def get_plate_preview(
             plate_num = 1
             if "Metadata/slice_info.config" in names:
                 try:
-                    import xml.etree.ElementTree as ET
+                    import defusedxml.ElementTree as ET
 
                     slice_content = zf.read("Metadata/slice_info.config").decode("utf-8")
                     root = ET.fromstring(slice_content)
@@ -2254,7 +2255,8 @@ async def get_archive_plates(
     """
     import json
     import re
-    import xml.etree.ElementTree as ET
+
+    import defusedxml.ElementTree as ET
 
     service = ArchiveService(db)
     archive = await service.get_archive(archive_id)
@@ -2560,7 +2562,7 @@ async def get_filament_requirements(
         archive_id: The archive ID
         plate_id: Optional plate index to filter filaments for (for multi-plate files)
     """
-    import xml.etree.ElementTree as ET
+    import defusedxml.ElementTree as ET
 
     service = ArchiveService(db)
     archive = await service.get_archive(archive_id)
