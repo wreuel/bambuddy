@@ -2,7 +2,111 @@
 
 All notable changes to Bambuddy will be documented in this file.
 
-## [0.1.7b] - Not released
+
+## [0.1.8] - Not released
+
+### Security
+- **XML External Entity (XXE) Prevention**:
+  - Replaced `xml.etree.ElementTree` with `defusedxml` across all 3MF parsing code
+  - Prevents XXE attacks through malicious 3MF files
+  - Detected by Bandit B314 security scanner
+- **Path Injection Vulnerabilities Fixed**:
+  - Added path traversal validation to project attachment endpoints
+  - Strengthened filename sanitization in timelapse processing
+  - Prevents directory traversal attacks via `../` sequences
+  - Detected by CodeQL security scanner
+- **Security Scanning in CI/CD**:
+  - Added Bandit (Python security analyzer) with SARIF upload to GitHub Security
+  - Added Trivy (container/IaC scanner) for Docker image and Dockerfile analysis
+  - Added pip-audit and npm-audit for dependency vulnerability scanning
+  - Automatic GitHub issue creation for detected vulnerabilities
+  - Security scan results visible in GitHub Security tab
+
+### Enhanced
+- **3D Model Viewer Improvements** (PR #262):
+  - Added plate selector for multi-plate 3MF files with thumbnail previews
+  - Object count display shows number of objects per plate and total
+  - Fullscreen toggle for immersive model viewing
+  - Resizable split view between plate selector and 3D viewer in fullscreen mode
+  - Pagination support for files with many plates (e.g., 50+ plates)
+  - Added i18n translations for all model viewer strings (English, German, Japanese)
+- **Virtual Printer Proxy Mode Improvements**:
+  - SSDP proxy for cross-network setups: select slicer network interface for automatic printer discovery via SSDP relay
+  - FTP proxy now listens on privileged port 990 (matching Bambu Studio expectations) instead of 9990
+  - For systemd: requires `AmbientCapabilities=CAP_NET_BIND_SERVICE` capability
+  - Automatic directory permission checking at startup with clear error messages for Docker/bare metal
+  - Updated translations for proxy mode steps in English, German, and Japanese
+
+### Fixed
+- **Authentication Required Error After Initial Setup** (Issue #257):
+  - Fixed "Authentication required" error when using printer controls after fresh install with auth enabled
+  - Token clearing on 401 responses is now more selective - only clears on invalid token messages
+  - Generic "Authentication required" errors (which may be timing issues) no longer clear the token
+  - Also fixed smart plug discovery scan endpoints missing auth headers
+- **Filament Hover Card Overlapping Navigation Bar** (Issue #259):
+  - Fixed filament info popup being partially covered by the navigation bar
+  - Hover card positioning now accounts for the fixed 56px header
+  - Cards near the top of the page now correctly flip to show below the slot
+- **Filament Statistics Incorrectly Multiplied by Quantity** (Issue #229):
+  - Fixed filament totals being inflated by incorrectly multiplying by quantity
+  - The `filament_used_grams` field already contains the total for the entire print job
+  - Removed incorrect `* quantity` multiplication from archive stats, Prometheus metrics, and FilamentTrends chart
+  - Example: A print with 26 objects using 126g was incorrectly shown as 3,276g
+- **Print Queue Status Does Not Match Printer Status** (Issue #249):
+  - Queue now shows "Paused" when the printer is paused instead of "Printing"
+  - Fetches real-time printer state for actively printing queue items
+  - Added translations for paused status in English, German, and Japanese
+- **Queue Scheduled Time Displayed in Wrong Timezone** (Issue #233):
+  - Fixed scheduled time being displayed in UTC instead of local timezone when editing queue items
+  - The datetime picker now correctly shows and saves times in the user's local timezone
+- **Mobile Layout Issues on Archives and Statistics Pages** (Issue #255):
+  - Fixed header buttons overflowing outside the screen on iPhone/mobile devices
+  - Headers now stack vertically on small screens with proper wrapping
+  - Applied consistent responsive pattern from PrintersPage
+- **AMS Auto-Matching Selects Wrong Slot** (Issue #245):
+  - Fixed AMS slot mapping when multiple trays have the same `tray_info_idx` (filament type identifier)
+  - `tray_info_idx` (e.g., "GFA00" for generic PLA) identifies filament TYPE, not unique spools
+  - When multiple trays match the same type, color is now used as a tiebreaker
+  - Previously used `find()` which always returned the first match regardless of color
+  - Fixed in both backend (print_scheduler.py) and frontend (useFilamentMapping.ts)
+  - Resolves wrong tray selection (e.g., A4 instead of B1) when multiple AMS units have same filament type
+- **A1/A1 Mini FTP Upload Failures** (Issue #271):
+  - Fixed FTP uploads hanging/timing out on A1 and A1 Mini printers
+  - Replaced `storbinary()` with manual chunked transfer using `transfercmd()`
+  - A1's FTP server has issues with Python's `storbinary()` waiting for completion response
+  - Uses 1MB chunks with explicit 120s socket timeout for reliable transfers
+  - Works for all printer models (X1C, P1S, P1P, A1, A1 Mini)
+- **P1S/P1P FTP Upload Failures**:
+  - Fixed FTP uploads failing with EOFError on P1S and P1P printers
+  - These printers use vsFTPd which requires SSL session reuse on data channel
+  - Removed P1S/P1P from skip-session-reuse list (they were incorrectly added)
+- **FTP Auto-Detection for A1 Printers**:
+  - Automatically detects working FTP mode (prot_p vs prot_c) for A1/A1 Mini
+  - Tries encrypted data channel first, falls back to clear if needed
+  - Caches working mode per printer IP to avoid repeated detection
+- **Safari Camera Stream Failing**:
+  - Fixed camera streams not loading in Safari due to Service Worker error
+  - Safari has stricter Service Worker scope requirements
+- **Queue Print Time for Multi-Plate Files** (PR #274):
+  - Fixed print time showing total for all plates instead of selected plate
+  - Now extracts per-plate print time from 3MF slice_info.config
+  - Contributed by MisterBeardy
+- **Docker Permissions**:
+  - Added user directive to docker-compose.yml using PUID/PGID environment variables
+  - Allows container to run as host user, fixing permission issues with bind-mounted volumes
+  - Usage: `PUID=$(id -u) PGID=$(id -g) docker compose up -d`
+
+### Added
+- **Windows Portable Launcher** (contributed by nmori):
+  - New `start_bambuddy.bat` for Windows users - double-click to run, no installation required
+  - Automatically downloads Python 3.13 and Node.js 22 on first run (portable, no system changes)
+  - Everything stored in `.portable\` folder for easy cleanup
+  - Commands: `start_bambuddy.bat` (launch), `start_bambuddy.bat update` (update deps), `start_bambuddy.bat reset` (clean start)
+  - Custom port via `set PORT=9000 & start_bambuddy.bat`
+  - Verifies all downloads with SHA256 checksums for security
+  - Supports both x64 and ARM64 Windows systems
+
+## [0.1.7] - 2026-02-03
 
 ### Security
 - **Critical: Missing API Endpoint Authentication** (CVE-2026-25505, CVSS 9.8):
