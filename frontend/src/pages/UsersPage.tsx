@@ -37,7 +37,7 @@ export function UsersPage() {
   });
 
   // Check if advanced auth is enabled
-  const { data: advancedAuthStatus } = useQuery({
+  const { data: advancedAuthStatus = { advanced_auth_enabled: false, smtp_configured: false } } = useQuery({
     queryKey: ['advancedAuthStatus'],
     queryFn: () => api.getAdvancedAuthStatus(),
   });
