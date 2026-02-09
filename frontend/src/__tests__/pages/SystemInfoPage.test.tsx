@@ -281,6 +281,28 @@ describe('SystemInfoPage', () => {
     expect(progressBars.length).toBeGreaterThan(0);
   });
 
+  it('displays extended privacy disclosure items', async () => {
+    (api.getSystemInfo as ReturnType<typeof vi.fn>).mockResolvedValue(mockSystemInfo);
+
+    render(<SystemInfoPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("What's in the support bundle?")).toBeInTheDocument();
+    });
+
+    // Original items
+    expect(screen.getByText(/App version and debug mode/)).toBeInTheDocument();
+    expect(screen.getByText(/Debug logs \(sanitized\)/)).toBeInTheDocument();
+
+    // New diagnostic items
+    expect(screen.getByText(/Printer connectivity and firmware versions/)).toBeInTheDocument();
+    expect(screen.getByText(/Integration status \(Spoolman, MQTT, HA\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Network interfaces \(subnets only\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Python package versions/)).toBeInTheDocument();
+    expect(screen.getByText(/Database health checks/)).toBeInTheDocument();
+    expect(screen.getByText(/Docker environment details/)).toBeInTheDocument();
+  });
+
   it('applies danger color for critical disk usage', async () => {
     const criticalDiskUsage = {
       ...mockSystemInfo,

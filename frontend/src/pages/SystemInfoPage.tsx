@@ -324,6 +324,12 @@ export function SystemInfoPage() {
                   <li>• {t('support.collectItem4', 'Printer models and nozzle counts')}</li>
                   <li>• {t('support.collectItem5', 'Non-sensitive settings (themes, formats)')}</li>
                   <li>• {t('support.collectItem6', 'Debug logs (sanitized)')}</li>
+                  <li>• {t('support.collectItem7', 'Printer connectivity and firmware versions')}</li>
+                  <li>• {t('support.collectItem8', 'Integration status (Spoolman, MQTT, HA)')}</li>
+                  <li>• {t('support.collectItem9', 'Network interfaces (subnets only)')}</li>
+                  <li>• {t('support.collectItem10', 'Python package versions')}</li>
+                  <li>• {t('support.collectItem11', 'Database health checks')}</li>
+                  <li>• {t('support.collectItem12', 'Docker environment details')}</li>
                 </ul>
               </div>
               <div>

@@ -2526,5 +2526,11 @@ export default {
   support: {
     debugLoggingActive: 'デバッグログが有効です',
     manageLogs: '管理',
+    collectItem7: 'プリンター接続状態とファームウェアバージョン',
+    collectItem8: '連携状態（Spoolman、MQTT、HA）',
+    collectItem9: 'ネットワークインターフェース（サブネットのみ）',
+    collectItem10: 'Pythonパッケージバージョン',
+    collectItem11: 'データベース健全性チェック',
+    collectItem12: 'Docker環境の詳細',
   },
 };

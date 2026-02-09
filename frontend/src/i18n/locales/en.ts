@@ -1809,6 +1809,12 @@ export default {
   support: {
     debugLoggingActive: 'Debug logging is active',
     manageLogs: 'Manage',
+    collectItem7: 'Printer connectivity and firmware versions',
+    collectItem8: 'Integration status (Spoolman, MQTT, HA)',
+    collectItem9: 'Network interfaces (subnets only)',
+    collectItem10: 'Python package versions',
+    collectItem11: 'Database health checks',
+    collectItem12: 'Docker environment details',
   },
 
   // File manager
