@@ -549,7 +549,7 @@ export function GitHubBackupSettings() {
                   />
                   <div>
                     <span className="text-white text-sm">App Settings</span>
-                    <p className="text-xs text-bambu-gray">Bambuddy configuration (excludes sensitive data)</p>
+                    <p className="text-xs text-bambu-gray">Bambuddy configuration (complete database)</p>
                   </div>
                 </label>
               </div>

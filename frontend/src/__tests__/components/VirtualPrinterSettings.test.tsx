@@ -19,6 +19,8 @@ vi.mock('../../api/client', () => ({
   api: {
     getSettings: vi.fn().mockResolvedValue({}),
     updateSettings: vi.fn().mockResolvedValue({}),
+    getPrinters: vi.fn().mockResolvedValue([]),
+    getNetworkInterfaces: vi.fn().mockResolvedValue({ interfaces: [] }),
   },
   virtualPrinterApi: {
     getSettings: vi.fn(),
@@ -567,6 +569,94 @@ describe('VirtualPrinterSettings', () => {
 
       await waitFor(() => {
         expect(virtualPrinterApi.updateSettings).toHaveBeenCalledWith({ mode: 'proxy' });
+      });
+    });
+  });
+
+  describe('network interface override', () => {
+    it('shows interface dropdown when enabled in immediate mode', async () => {
+      vi.mocked(virtualPrinterApi.getSettings).mockResolvedValue(
+        createMockSettings({ enabled: true, mode: 'immediate' })
+      );
+
+      render(<VirtualPrinterSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Network Interface Override')).toBeInTheDocument();
+      });
+    });
+
+    it('shows interface dropdown when enabled in review mode', async () => {
+      vi.mocked(virtualPrinterApi.getSettings).mockResolvedValue(
+        createMockSettings({ enabled: true, mode: 'review' })
+      );
+
+      render(<VirtualPrinterSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Network Interface Override')).toBeInTheDocument();
+      });
+    });
+
+    it('shows interface dropdown when enabled in print_queue mode', async () => {
+      vi.mocked(virtualPrinterApi.getSettings).mockResolvedValue(
+        createMockSettings({ enabled: true, mode: 'print_queue' })
+      );
+
+      render(<VirtualPrinterSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Network Interface Override')).toBeInTheDocument();
+      });
+    });
+
+    it('shows interface dropdown when enabled in proxy mode', async () => {
+      vi.mocked(virtualPrinterApi.getSettings).mockResolvedValue(
+        createMockSettings({ enabled: true, mode: 'proxy', target_printer_id: 1 })
+      );
+
+      render(<VirtualPrinterSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Network Interface Override')).toBeInTheDocument();
+      });
+    });
+
+    it('hides interface dropdown when disabled', async () => {
+      vi.mocked(virtualPrinterApi.getSettings).mockResolvedValue(
+        createMockSettings({ enabled: false, mode: 'immediate' })
+      );
+
+      render(<VirtualPrinterSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Mode')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Network Interface Override')).not.toBeInTheDocument();
+    });
+
+    it('shows configured status when interface is set', async () => {
+      vi.mocked(virtualPrinterApi.getSettings).mockResolvedValue(
+        createMockSettings({ enabled: true, mode: 'immediate', remote_interface_ip: '10.0.0.50' })
+      );
+
+      render(<VirtualPrinterSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Interface override active')).toBeInTheDocument();
+      });
+    });
+
+    it('shows optional hint when no interface is set', async () => {
+      vi.mocked(virtualPrinterApi.getSettings).mockResolvedValue(
+        createMockSettings({ enabled: true, mode: 'immediate', remote_interface_ip: '' })
+      );
+
+      render(<VirtualPrinterSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Optional.*auto-detected IP/)).toBeInTheDocument();
       });
     });
   });

@@ -129,6 +129,19 @@ export interface NozzleInfo {
   nozzle_diameter: string;  // e.g., "0.4"
 }
 
+export interface NozzleRackSlot {
+  id: number;
+  nozzle_type: string;
+  nozzle_diameter: string;
+  wear: number | null;
+  stat: number | null;  // Nozzle status (e.g. mounted/docked)
+  max_temp: number;
+  serial_number: string;
+  filament_color: string;  // RGBA hex ("00000000" = no filament)
+  filament_id: string;
+  filament_type: string;  // Material type (e.g. "PLA", "PETG")
+}
+
 export interface PrintOptions {
   // Core AI detectors
   spaghetti_detector: boolean;
@@ -186,6 +199,7 @@ export interface PrinterStatus {
   ipcam: boolean;  // Live view enabled
   wifi_signal: number | null;  // WiFi signal strength in dBm
   nozzles: NozzleInfo[];  // Nozzle hardware info (index 0=left/primary, 1=right)
+  nozzle_rack: NozzleRackSlot[];  // H2C 6-nozzle tool-changer rack
   print_options: PrintOptions | null;  // AI detection and print options
   // Calibration stage tracking
   stg_cur: number;  // Current stage number (-1 = not calibrating)
@@ -751,11 +765,16 @@ export interface AppSettings {
   ha_enabled: boolean;
   ha_url: string;
   ha_token: string;
+  ha_url_from_env: boolean;
+  ha_token_from_env: boolean;
+  ha_env_managed: boolean;
   // File Manager / Library settings
   library_archive_mode: 'always' | 'never' | 'ask';
   library_disk_warning_gb: number;
   // Camera view settings
   camera_view_mode: 'window' | 'embedded';
+  // Preferred slicer
+  preferred_slicer: 'bambu_studio' | 'orcaslicer';
   // Prometheus metrics
   prometheus_enabled: boolean;
   prometheus_token: string;
@@ -832,6 +851,44 @@ export interface SlicerSettingUpdate {
 export interface SlicerSettingDeleteResponse {
   success: boolean;
   message: string;
+}
+
+// Local preset types (OrcaSlicer imports)
+export interface LocalPreset {
+  id: number;
+  name: string;
+  preset_type: string;
+  source: string;
+  filament_type: string | null;
+  filament_vendor: string | null;
+  nozzle_temp_min: number | null;
+  nozzle_temp_max: number | null;
+  pressure_advance: string | null;
+  default_filament_colour: string | null;
+  filament_cost: string | null;
+  filament_density: string | null;
+  compatible_printers: string | null;
+  inherits: string | null;
+  version: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LocalPresetDetail extends LocalPreset {
+  setting: Record<string, unknown>;
+}
+
+export interface LocalPresetsResponse {
+  filament: LocalPreset[];
+  printer: LocalPreset[];
+  process: LocalPreset[];
+}
+
+export interface ImportResponse {
+  success: boolean;
+  imported: number;
+  skipped: number;
+  errors: string[];
 }
 
 export interface FieldOption {
@@ -1619,8 +1676,14 @@ export interface UnlinkedSpool {
   location: string | null;
 }
 
+export interface LinkedSpoolInfo {
+  id: number;
+  remaining_weight: number | null;
+  filament_weight: number | null;
+}
+
 export interface LinkedSpoolsMap {
-  linked: Record<string, number>; // tag (uppercase) -> spool_id
+  linked: Record<string, LinkedSpoolInfo>; // tag (uppercase) -> spool info
 }
 
 // Update types
@@ -1843,6 +1906,7 @@ export interface LoginResponse {
 export interface UserResponse {
   id: number;
   username: string;
+  email?: string;
   role: string;  // Deprecated, kept for backward compatibility
   is_active: boolean;
   is_admin: boolean;  // Computed from role and group membership
@@ -1853,7 +1917,8 @@ export interface UserResponse {
 
 export interface UserCreate {
   username: string;
-  password: string;
+  password?: string;  // Optional when advanced auth is enabled
+  email?: string;
   role: string;
   group_ids?: number[];
 }
@@ -1861,6 +1926,7 @@ export interface UserCreate {
 export interface UserUpdate {
   username?: string;
   password?: string;
+  email?: string;
   role?: string;
   is_active?: boolean;
   group_ids?: number[];
@@ -1870,6 +1936,54 @@ export interface SetupRequest {
   auth_enabled: boolean;
   admin_username?: string;
   admin_password?: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+}
+
+export interface ResetPasswordRequest {
+  user_id: number;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+}
+
+export interface SMTPSettings {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username?: string;
+  smtp_password?: string;
+  smtp_security: 'starttls' | 'ssl' | 'none';
+  smtp_auth_enabled: boolean;
+  smtp_from_email: string;
+  smtp_from_name: string;
+}
+
+export interface TestSMTPRequest {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username?: string;
+  smtp_password?: string;
+  smtp_security: 'starttls' | 'ssl' | 'none';
+  smtp_auth_enabled: boolean;
+  smtp_from_email: string;
+  test_recipient: string;
+}
+
+export interface TestSMTPResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface AdvancedAuthStatus {
+  advanced_auth_enabled: boolean;
+  smtp_configured: boolean;
 }
 
 export interface SetupResponse {
@@ -1904,6 +2018,38 @@ export const api = {
   disableAuth: () =>
     request<{ message: string; auth_enabled: boolean }>('/auth/disable', {
       method: 'POST',
+    }),
+  
+  // Advanced Authentication
+  testSMTP: (data: TestSMTPRequest) =>
+    request<TestSMTPResponse>('/auth/smtp/test', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getSMTPSettings: () => request<SMTPSettings | null>('/auth/smtp'),
+  saveSMTPSettings: (data: SMTPSettings) =>
+    request<{ message: string }>('/auth/smtp', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  enableAdvancedAuth: () =>
+    request<{ message: string; advanced_auth_enabled: boolean }>('/auth/advanced-auth/enable', {
+      method: 'POST',
+    }),
+  disableAdvancedAuth: () =>
+    request<{ message: string; advanced_auth_enabled: boolean }>('/auth/advanced-auth/disable', {
+      method: 'POST',
+    }),
+  getAdvancedAuthStatus: () => request<AdvancedAuthStatus>('/auth/advanced-auth/status'),
+  forgotPassword: (data: ForgotPasswordRequest) =>
+    request<ForgotPasswordResponse>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  resetUserPassword: (data: ResetPasswordRequest) =>
+    request<ResetPasswordResponse>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
 
   // Users
@@ -2911,8 +3057,8 @@ export const api = {
     request<Record<number, SlotPresetMapping>>(`/printers/${printerId}/slot-presets`),
   getSlotPreset: (printerId: number, amsId: number, trayId: number) =>
     request<SlotPresetMapping | null>(`/printers/${printerId}/slot-presets/${amsId}/${trayId}`),
-  saveSlotPreset: (printerId: number, amsId: number, trayId: number, presetId: string, presetName: string) =>
-    request<SlotPresetMapping>(`/printers/${printerId}/slot-presets/${amsId}/${trayId}?preset_id=${encodeURIComponent(presetId)}&preset_name=${encodeURIComponent(presetName)}`, {
+  saveSlotPreset: (printerId: number, amsId: number, trayId: number, presetId: string, presetName: string, presetSource = 'cloud') =>
+    request<SlotPresetMapping>(`/printers/${printerId}/slot-presets/${amsId}/${trayId}?preset_id=${encodeURIComponent(presetId)}&preset_name=${encodeURIComponent(presetName)}&preset_source=${encodeURIComponent(presetSource)}`, {
       method: 'PUT',
     }),
   deleteSlotPreset: (printerId: number, amsId: number, trayId: number) =>
@@ -3638,6 +3784,38 @@ export const api = {
 
   clearGitHubBackupLogs: (keepLast: number = 10) =>
     request<{ deleted: number; message: string }>(`/github-backup/logs?keep_last=${keepLast}`, { method: 'DELETE' }),
+
+  // Local Presets (OrcaSlicer imports)
+  getLocalPresets: () =>
+    request<LocalPresetsResponse>('/local-presets/'),
+  getLocalPresetDetail: (id: number) =>
+    request<LocalPresetDetail>(`/local-presets/${id}`),
+  importLocalPresets: (formData: FormData) =>
+    fetch(`${API_BASE}/local-presets/import`, {
+      method: 'POST',
+      headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<ImportResponse>;
+    }),
+  createLocalPreset: (data: { name: string; preset_type: string; setting: Record<string, unknown> }) =>
+    request<LocalPreset>('/local-presets/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateLocalPreset: (id: number, data: { name?: string; setting?: Record<string, unknown> }) =>
+    request<LocalPreset>(`/local-presets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteLocalPreset: (id: number) =>
+    request<{ success: boolean }>(`/local-presets/${id}`, { method: 'DELETE' }),
+  refreshBaseProfileCache: () =>
+    request<{ refreshed: number; failed: number; total: number }>('/local-presets/base-cache/refresh', { method: 'POST' }),
 };
 
 // AMS History types
@@ -3925,6 +4103,7 @@ export interface DiscoveryInfo {
   is_docker: boolean;
   ssdp_running: boolean;
   scan_running: boolean;
+  subnets: string[];
 }
 
 export interface SubnetScanStatus {

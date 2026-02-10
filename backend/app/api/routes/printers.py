@@ -19,6 +19,7 @@ from backend.app.schemas.printer import (
     AMSUnit,
     HMSErrorResponse,
     NozzleInfoResponse,
+    NozzleRackSlot,
     PrinterCreate,
     PrinterResponse,
     PrinterStatus,
@@ -360,6 +361,23 @@ async def get_printer_status(
         for n in (state.nozzles or [])
     ]
 
+    # H2C nozzle rack (tool-changer dock positions)
+    nozzle_rack = [
+        NozzleRackSlot(
+            id=n.get("id", 0),
+            nozzle_type=n.get("type", ""),
+            nozzle_diameter=n.get("diameter", ""),
+            wear=n.get("wear"),
+            stat=n.get("stat"),
+            max_temp=n.get("max_temp", 0),
+            serial_number=n.get("serial_number", ""),
+            filament_color=n.get("filament_color", ""),
+            filament_id=n.get("filament_id", ""),
+            filament_type=n.get("filament_type", ""),
+        )
+        for n in (state.nozzle_rack or [])
+    ]
+
     # Convert print options to response format
     print_options = PrintOptionsResponse(
         spaghetti_detector=state.print_options.spaghetti_detector,
@@ -423,6 +441,7 @@ async def get_printer_status(
         ipcam=state.ipcam,
         wifi_signal=state.wifi_signal,
         nozzles=nozzles,
+        nozzle_rack=nozzle_rack,
         print_options=print_options,
         stg_cur=state.stg_cur,
         stg_cur_name=get_derived_status_name(state, printer.model),
@@ -535,8 +554,13 @@ async def test_printer_connection(
     return result
 
 
-# Cache for cover images (printer_id -> {(gcode_file, view) -> image_bytes})
+# Cache for cover images (printer_id -> {(subtask_name, plate_num, view) -> image_bytes})
 _cover_cache: dict[int, dict[tuple[str, str], bytes]] = {}
+
+
+def clear_cover_cache(printer_id: int) -> None:
+    """Clear cached cover images for a printer. Call on print start to avoid stale thumbnails."""
+    _cover_cache.pop(printer_id, None)
 
 
 @router.get("/{printer_id}/cover")
@@ -1484,6 +1508,7 @@ async def save_slot_preset(
     tray_id: int,
     preset_id: str,
     preset_name: str,
+    preset_source: str = "cloud",
     _=RequirePermissionIfAuthEnabled(Permission.PRINTERS_UPDATE),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1507,6 +1532,7 @@ async def save_slot_preset(
         # Update existing
         mapping.preset_id = preset_id
         mapping.preset_name = preset_name
+        mapping.preset_source = preset_source
     else:
         # Create new
         mapping = SlotPresetMapping(
@@ -1515,6 +1541,7 @@ async def save_slot_preset(
             tray_id=tray_id,
             preset_id=preset_id,
             preset_name=preset_name,
+            preset_source=preset_source,
         )
         db.add(mapping)
 
@@ -1526,6 +1553,7 @@ async def save_slot_preset(
         "tray_id": mapping.tray_id,
         "preset_id": mapping.preset_id,
         "preset_name": mapping.preset_name,
+        "preset_source": mapping.preset_source,
     }
 
 

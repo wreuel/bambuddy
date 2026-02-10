@@ -469,7 +469,7 @@ export function Layout() {
                         <img
                           src={`/api/v1/external-links/${link.id}/icon`}
                           alt=""
-                          className={`w-5 h-5 flex-shrink-0 ${mode === 'dark' ? 'invert opacity-[0.65]' : 'opacity-60'}`}
+                          className="w-5 h-5 flex-shrink-0"
                         />
                       ) : (
                         LinkIcon && <LinkIcon className="w-5 h-5 flex-shrink-0" />

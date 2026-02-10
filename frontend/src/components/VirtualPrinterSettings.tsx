@@ -42,11 +42,11 @@ export function VirtualPrinterSettings() {
     queryFn: api.getPrinters,
   });
 
-  // Fetch network interfaces for SSDP proxy (only in proxy mode)
+  // Fetch network interfaces for IP override (all modes when enabled)
   const { data: networkInterfaces } = useQuery({
     queryKey: ['network-interfaces'],
     queryFn: () => api.getNetworkInterfaces().then(res => res.interfaces),
-    enabled: localMode === 'proxy',
+    enabled: localEnabled,
   });
 
   // Initialize local state from settings
@@ -365,8 +365,8 @@ export function VirtualPrinterSettings() {
             </div>
           )}
 
-          {/* Remote Interface - only for proxy mode (SSDP proxy) */}
-          {localMode === 'proxy' && (
+          {/* Remote Interface - available for all modes (IP override / SSDP proxy) */}
+          {localEnabled && (
             <div className="py-3 border-t border-bambu-dark-tertiary">
               <div className="text-white font-medium mb-2">{t('virtualPrinter.remoteInterface.title')}</div>
               <div className="text-sm text-bambu-gray mb-3">

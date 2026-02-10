@@ -183,4 +183,201 @@ describe('PrintersPage', () => {
       expect(disabledPrinter).toBeInTheDocument();
     });
   });
+
+  describe('nozzle rack card', () => {
+    const h2cStatus = {
+      ...mockPrinterStatus,
+      nozzle_rack: [
+        { id: 0, nozzle_type: 'HS', nozzle_diameter: '0.4', wear: 5, stat: 1, max_temp: 300, serial_number: 'SN-L', filament_color: '', filament_id: '', filament_type: '' },
+        { id: 1, nozzle_type: 'HS', nozzle_diameter: '0.4', wear: 3, stat: 0, max_temp: 300, serial_number: 'SN-R', filament_color: '', filament_id: '', filament_type: '' },
+        { id: 16, nozzle_type: 'HS', nozzle_diameter: '0.4', wear: 10, stat: 0, max_temp: 300, serial_number: 'SN-16', filament_color: '', filament_id: '', filament_type: '' },
+        { id: 17, nozzle_type: 'HH01', nozzle_diameter: '0.6', wear: 0, stat: 0, max_temp: 300, serial_number: 'SN-17', filament_color: '', filament_id: '', filament_type: '' },
+        { id: 18, nozzle_type: 'HS', nozzle_diameter: '0.4', wear: 2, stat: 0, max_temp: 300, serial_number: 'SN-18', filament_color: '', filament_id: '', filament_type: '' },
+        { id: 19, nozzle_type: '', nozzle_diameter: '', wear: null, stat: null, max_temp: 0, serial_number: '', filament_color: '', filament_id: '', filament_type: '' },
+        { id: 20, nozzle_type: '', nozzle_diameter: '', wear: null, stat: null, max_temp: 0, serial_number: '', filament_color: '', filament_id: '', filament_type: '' },
+        { id: 21, nozzle_type: '', nozzle_diameter: '', wear: null, stat: null, max_temp: 0, serial_number: '', filament_color: '', filament_id: '', filament_type: '' },
+      ],
+    };
+
+    it('shows nozzle rack when H2C rack slots present', async () => {
+      server.use(
+        http.get('/api/v1/printers/:id/status', () => {
+          return HttpResponse.json(h2cStatus);
+        })
+      );
+
+      render(<PrintersPage />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Nozzle Rack').length).toBeGreaterThan(0);
+      });
+    });
+
+    it('shows 6 rack slot elements for H2C', async () => {
+      server.use(
+        http.get('/api/v1/printers/:id/status', () => {
+          return HttpResponse.json(h2cStatus);
+        })
+      );
+
+      render(<PrintersPage />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Nozzle Rack').length).toBeGreaterThan(0);
+      });
+
+      // Rack shows diameters for occupied slots and dashes for empty ones
+      const dashes = screen.getAllByText('—');
+      expect(dashes.length).toBeGreaterThanOrEqual(3); // 3 empty rack positions (IDs 19,20,21)
+    });
+
+    it('hides nozzle rack when only L/R nozzles present (H2D)', async () => {
+      const h2dStatus = {
+        ...mockPrinterStatus,
+        nozzle_rack: [
+          { id: 0, nozzle_type: 'HS', nozzle_diameter: '0.4', wear: 5, stat: 1, max_temp: 300, serial_number: '', filament_color: '', filament_id: '', filament_type: '' },
+          { id: 1, nozzle_type: 'HS', nozzle_diameter: '0.4', wear: 3, stat: 1, max_temp: 300, serial_number: '', filament_color: '', filament_id: '', filament_type: '' },
+        ],
+      };
+
+      server.use(
+        http.get('/api/v1/printers/:id/status', () => {
+          return HttpResponse.json(h2dStatus);
+        })
+      );
+
+      render(<PrintersPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('X1 Carbon')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Nozzle Rack')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('firmware version badge', () => {
+    const firmwareUpToDate = {
+      printer_id: 1,
+      current_version: '01.09.00.00',
+      latest_version: '01.09.00.00',
+      update_available: false,
+      download_url: null,
+      release_notes: 'Bug fixes and improvements.',
+    };
+
+    const firmwareUpdateAvailable = {
+      printer_id: 1,
+      current_version: '01.08.00.00',
+      latest_version: '01.09.00.00',
+      update_available: true,
+      download_url: 'https://example.com/firmware.bin',
+      release_notes: 'New features added.',
+    };
+
+    it('shows green badge when firmware is up to date', async () => {
+      server.use(
+        http.get('/api/v1/firmware/updates/:id', () => {
+          return HttpResponse.json(firmwareUpToDate);
+        }),
+        http.get('/api/v1/settings/', () => {
+          return HttpResponse.json({
+            check_printer_firmware: true,
+            auto_archive: true,
+            save_thumbnails: true,
+          });
+        })
+      );
+
+      render(<PrintersPage />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('01.09.00.00').length).toBeGreaterThan(0);
+      });
+
+      const badge = screen.getAllByText('01.09.00.00')[0].closest('button');
+      expect(badge).toBeInTheDocument();
+      expect(badge?.className).toContain('text-status-ok');
+    });
+
+    it('shows orange badge when firmware update is available', async () => {
+      server.use(
+        http.get('/api/v1/firmware/updates/:id', () => {
+          return HttpResponse.json(firmwareUpdateAvailable);
+        }),
+        http.get('/api/v1/settings/', () => {
+          return HttpResponse.json({
+            check_printer_firmware: true,
+            auto_archive: true,
+            save_thumbnails: true,
+          });
+        })
+      );
+
+      render(<PrintersPage />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('01.08.00.00').length).toBeGreaterThan(0);
+      });
+
+      const badge = screen.getAllByText('01.08.00.00')[0].closest('button');
+      expect(badge).toBeInTheDocument();
+      expect(badge?.className).toContain('text-orange-400');
+    });
+
+    it('hides badge when firmware check is disabled', async () => {
+      server.use(
+        http.get('/api/v1/settings/', () => {
+          return HttpResponse.json({
+            check_printer_firmware: false,
+            auto_archive: true,
+            save_thumbnails: true,
+          });
+        })
+      );
+
+      render(<PrintersPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('X1 Carbon')).toBeInTheDocument();
+      });
+
+      // Version should not appear when firmware check is disabled
+      expect(screen.queryByText('01.09.00.00')).not.toBeInTheDocument();
+      expect(screen.queryByText('01.08.00.00')).not.toBeInTheDocument();
+    });
+
+    it('hides badge when API has no firmware data for the model', async () => {
+      const firmwareNoData = {
+        printer_id: 1,
+        current_version: '01.01.03.00',
+        latest_version: null,
+        update_available: false,
+        download_url: null,
+        release_notes: null,
+      };
+
+      server.use(
+        http.get('/api/v1/firmware/updates/:id', () => {
+          return HttpResponse.json(firmwareNoData);
+        }),
+        http.get('/api/v1/settings/', () => {
+          return HttpResponse.json({
+            check_printer_firmware: true,
+            auto_archive: true,
+            save_thumbnails: true,
+          });
+        })
+      );
+
+      render(<PrintersPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('X1 Carbon')).toBeInTheDocument();
+      });
+
+      // Badge should not appear when API returns no latest_version
+      expect(screen.queryByText('01.01.03.00')).not.toBeInTheDocument();
+    });
+  });
 });

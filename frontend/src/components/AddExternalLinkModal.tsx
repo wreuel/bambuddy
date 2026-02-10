@@ -5,8 +5,6 @@ import { api } from '../api/client';
 import type { ExternalLink, ExternalLinkCreate, ExternalLinkUpdate } from '../api/client';
 import { Button } from './Button';
 import { IconPicker, getIconByName } from './IconPicker';
-import { useTheme } from '../contexts/ThemeContext';
-
 interface AddExternalLinkModalProps {
   link?: ExternalLink | null;
   onClose: () => void;
@@ -14,7 +12,6 @@ interface AddExternalLinkModalProps {
 
 export function AddExternalLinkModal({ link, onClose }: AddExternalLinkModalProps) {
   const queryClient = useQueryClient();
-  const { mode } = useTheme();
   const isEditing = !!link;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -166,7 +163,7 @@ export function AddExternalLinkModal({ link, onClose }: AddExternalLinkModalProp
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-full bg-bambu-green/20 text-bambu-green">
               {useCustomIcon && customIconPreview ? (
-                <img src={customIconPreview} alt="" className={`w-5 h-5 rounded ${mode === 'dark' ? 'invert opacity-[0.65]' : 'opacity-60'}`} />
+                <img src={customIconPreview} alt="" className="w-5 h-5 rounded" />
               ) : (
                 <PresetIcon className="w-5 h-5" />
               )}
@@ -233,7 +230,7 @@ export function AddExternalLinkModal({ link, onClose }: AddExternalLinkModalProp
                 />
                 {useCustomIcon && customIconPreview ? (
                   <div className="flex items-center gap-2">
-                    <img src={customIconPreview} alt="Custom icon" className={`w-8 h-8 rounded border border-bambu-dark-tertiary ${mode === 'dark' ? 'invert opacity-[0.65]' : 'opacity-60'}`} />
+                    <img src={customIconPreview} alt="Custom icon" className="w-8 h-8 rounded border border-bambu-dark-tertiary" />
                     <button
                       type="button"
                       onClick={handleRemoveCustomIcon}

@@ -17,6 +17,8 @@ PRINTER_MODEL_MAP = {
     "Bambu Lab A1 mini": "A1 Mini",
     "Bambu Lab H2D": "H2D",
     "Bambu Lab H2D Pro": "H2D Pro",
+    "Bambu Lab H2C": "H2C",
+    "Bambu Lab H2S": "H2S",
 }
 
 # Map from printer_model_id (internal codes in slice_info.config) to short names
@@ -37,10 +39,12 @@ PRINTER_MODEL_ID_MAP = {
     "N1": "A1",
     "N2S": "A1 Mini",
     "A04": "A1 Mini",
-    # H2D series (Office/H series)
+    # H2 series (Office/H series)
     "O1D": "H2D",
     "O1E": "H2D Pro",  # Some devices report O1E
     "O2D": "H2D Pro",  # Some devices report O2D
+    "O1C": "H2C",
+    "O1S": "H2S",
 }
 
 

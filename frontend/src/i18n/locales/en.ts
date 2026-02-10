@@ -115,7 +115,7 @@ export default {
     deletePrinter: 'Delete Printer',
     printerName: 'Printer Name',
     serialNumber: 'Serial Number',
-    ipAddress: 'IP Address',
+    ipAddress: 'IP Address / Hostname',
     accessCode: 'Access Code',
     model: 'Model',
     nozzleCount: 'Nozzle Count',
@@ -207,6 +207,24 @@ export default {
     reconnect: 'Reconnect',
     mqttDebug: 'MQTT Debug',
     activeNozzle: 'Active: {{nozzle}} nozzle',
+    nozzleRack: 'Nozzle Rack',
+    nozzleDocked: 'Docked',
+    nozzleMounted: 'Mounted',
+    nozzleActive: 'Active',
+    nozzleIdle: 'Idle',
+    nozzleDiameter: 'Diameter',
+    nozzleType: 'Type',
+    nozzleStatus: 'Status',
+    nozzleFilament: 'Filament',
+    nozzleWear: 'Wear',
+    nozzleMaxTemp: 'Max Temp',
+    nozzleSerial: 'Serial',
+    nozzleHardenedSteel: 'Hardened Steel',
+    nozzleStainlessSteel: 'Stainless Steel',
+    nozzleTungstenCarbide: 'Tungsten Carbide',
+    nozzleFlow: 'Flow',
+    nozzleHighFlow: 'High Flow',
+    nozzleStandardFlow: 'Standard',
     // Firmware
     firmwareUpdate: 'Firmware Update',
     firmwareInstructions: 'On the printer\'s touchscreen, go to',
@@ -366,6 +384,7 @@ export default {
     openCameraWindow: 'Open camera in new window',
     // Firmware
     firmwareUpdateAvailable: 'Firmware update available: {{current}} → {{latest}}',
+    firmwareUpToDate: 'Firmware {{version}} — Up to date',
     firmwareUpdateButton: 'Update',
     // Plate detection
     plateDetection: {
@@ -402,6 +421,7 @@ export default {
     // Firmware modal
     firmwareModal: {
       title: 'Firmware Update',
+      titleUpToDate: 'Firmware Info',
       currentVersion: 'Current:',
       latestVersion: 'Latest:',
       releaseNotes: 'Release Notes',
@@ -416,6 +436,7 @@ export default {
       done: 'Done',
       starting: 'Starting...',
       uploadFirmware: 'Upload Firmware',
+      uploadFailed: 'Failed to start upload: {{error}}',
       uploadedToast: 'Firmware uploaded! Trigger update from printer screen.',
     },
     accessCodePlaceholder: 'Leave empty to keep current',
@@ -504,7 +525,7 @@ export default {
     menu: {
       print: 'Print',
       schedule: 'Schedule',
-      openInBambuStudio: 'Open in Bambu Studio',
+      openInBambuStudio: 'Open in Slicer',
       slice: 'Slice',
       externalLink: 'External Link',
       viewOnMakerWorld: 'View on MakerWorld',
@@ -585,8 +606,8 @@ export default {
       reprint: 'Reprint',
       schedulePrint: 'Schedule Print',
       schedule: 'Schedule',
-      openInBambuStudio: 'Open in Bambu Studio',
-      openInBambuStudioToSlice: 'Open in Bambu Studio to slice',
+      openInBambuStudio: 'Open in Slicer',
+      openInBambuStudioToSlice: 'Open in Slicer to slice',
       slice: 'Slice',
       externalLink: 'External Link',
       makerWorld: 'MakerWorld: {{designer}}',
@@ -1000,6 +1021,60 @@ export default {
       virtualPrinter: 'Virtual Printer',
       users: 'Users',
       backup: 'Backup',
+      globalEmail: 'Global Email',
+    },
+    // Email settings
+    email: {
+      smtpSettings: 'SMTP Configuration',
+      smtpHost: 'SMTP Server',
+      smtpPort: 'SMTP Port',
+      security: 'Security',
+      authentication: 'Authentication',
+      username: 'Username',
+      password: 'Password',
+      fromEmail: 'From Email',
+      fromName: 'From Name',
+      testConnection: 'Test SMTP Connection',
+      testRecipient: 'Test Recipient Email',
+      sendTest: 'Send Test Email',
+      sending: 'Sending...',
+      save: 'Save Settings',
+      saving: 'Saving...',
+      advancedAuth: 'Advanced Authentication',
+      advancedAuthEnabled: 'Advanced Authentication is enabled',
+      advancedAuthEnabledDesc: 'Email-based user management features are active. New users will receive auto-generated passwords via email, and users can reset their passwords through the forgot password feature.',
+      advancedAuthDisabled: 'Advanced Authentication is disabled',
+      advancedAuthDisabledDesc: 'Enable advanced authentication to activate email-based features for user management.',
+      enable: 'Enable',
+      disable: 'Disable',
+      feature1: 'Passwords are auto-generated and emailed to new users',
+      feature2: 'Users can login with username or email',
+      feature3: 'Forgot password feature is available',
+      feature4: 'Admins can reset user passwords via email',
+      // Error messages
+      errors: {
+        requiredFields: 'Please fill in all required fields',
+        usernameRequired: 'Username is required when authentication is enabled',
+        enterTestEmail: 'Please enter a test email address',
+        smtpServerAndEmail: 'Please fill in SMTP Server and From Email before testing',
+        usernamePasswordRequired: 'Username and Password are required when authentication is enabled',
+        configureSmtpFirst: 'Please configure and test SMTP settings first',
+      },
+      // Success messages
+      success: {
+        settingsSaved: 'SMTP settings saved successfully',
+      },
+      // Security options
+      securityOptions: {
+        starttls: 'STARTTLS (Port 587)',
+        ssl: 'SSL/TLS (Port 465)',
+        none: 'None (Port 25)',
+      },
+      // Authentication options
+      authOptions: {
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+      },
     },
     appearance: 'Appearance',
     notifications: 'Notifications',
@@ -1093,6 +1168,10 @@ export default {
     enableRetry: 'Enable retry',
     // Home Assistant
     homeAssistantDescription: 'Control smart plugs via Home Assistant',
+    environmentManagedLabel: '(Environment Managed)',
+    autoEnabledViaEnv: 'Automatically enabled via environment variables',
+    urlFromEnvReadOnly: 'Value set by HA_URL environment variable (read-only)',
+    tokenFromEnvReadOnly: 'Value set by HA_TOKEN environment variable (read-only)',
     // MQTT
     mqttConnectedTo: 'Connected to',
     // Prometheus
@@ -1242,6 +1321,8 @@ export default {
     archiveSettings: 'Archive Settings',
     newWindow: 'New Window',
     embeddedOverlay: 'Embedded Overlay',
+    preferredSlicer: 'Preferred Slicer',
+    preferredSlicerDescription: 'Choose which slicer application to open files with',
     externalCameras: 'External Cameras',
     costTracking: 'Cost Tracking',
     printsOnly: 'Prints Only',
@@ -1412,6 +1493,8 @@ export default {
     subtitle: 'Sign in to your account',
     username: 'Username',
     usernamePlaceholder: 'Enter your username',
+    usernameOrEmail: 'Username or Email',
+    usernameOrEmailPlaceholder: 'Username or @ Email',
     password: 'Password',
     passwordPlaceholder: 'Enter your password',
     signIn: 'Sign in',
@@ -1422,6 +1505,12 @@ export default {
     enterCredentials: 'Please enter username and password',
     forgotPasswordTitle: 'Forgot Password',
     forgotPasswordMessage: "If you've forgotten your password, please contact your system administrator to reset it.",
+    forgotPasswordEmailMessage: "Enter your email address and we'll send you a new password.",
+    emailAddress: 'Email Address',
+    emailPlaceholder: 'your.email@example.com',
+    cancel: 'Cancel',
+    sending: 'Sending...',
+    sendResetEmail: 'Send Reset Email',
     howToReset: 'How to reset your password:',
     resetStep1: 'Contact your Bambuddy administrator',
     resetStep2: 'Ask them to reset your password in User Management',
@@ -1506,6 +1595,7 @@ export default {
     recording: 'Recording',
     startRecording: 'Start Recording',
     stopRecording: 'Stop Recording',
+    chamberLight: 'Toggle chamber light',
   },
 
   // Groups management
@@ -1586,10 +1676,13 @@ export default {
       creating: 'Creating...',
       saving: 'Saving...',
       saveChanges: 'Save Changes',
+      advancedAuthSubtitle: 'with Advanced Authentication',
     },
     form: {
       username: 'Username',
       usernamePlaceholder: 'Enter username',
+      email: 'Email',
+      emailPlaceholder: 'user@example.com',
       password: 'Password',
       passwordPlaceholder: 'Enter password',
       confirmPassword: 'Confirm Password',
@@ -1598,6 +1691,11 @@ export default {
       confirmNewPasswordPlaceholder: 'Confirm new password',
       leaveBlankToKeep: 'leave blank to keep current',
       groups: 'Groups',
+      optional: 'optional',
+      autoGeneratedPassword: 'A secure password will be automatically generated and emailed to the user.',
+      passwordManagedByAdvancedAuth: 'Password is managed by Advanced Authentication. Use "Reset Password" to send a new password to the user via email.',
+      resetPassword: 'Reset Password',
+      resettingPassword: 'Resetting Password...',
     },
     deleteModal: {
       title: 'Delete User',
@@ -1632,7 +1730,42 @@ export default {
     subtitle: 'Manage your slicer presets and pressure advance calibrations',
     tabs: {
       cloud: 'Cloud Profiles',
+      local: 'Local Profiles',
       kprofiles: 'K-Profiles',
+    },
+    localProfiles: {
+      title: 'Local Profiles',
+      subtitle: 'Import and manage slicer presets from OrcaSlicer',
+      import: 'Import Profiles',
+      importDesc: 'Drop .bbscfg, .bbsflmt, .orca_filament, .zip, or .json files here',
+      importing: 'Importing...',
+      search: 'Search local presets...',
+      noPresets: 'No local presets yet',
+      badge: 'Local',
+      edit: 'Edit',
+      delete: 'Delete',
+      cancel: 'Cancel',
+      deleteConfirmTitle: 'Delete Preset',
+      deleteConfirm: 'Are you sure you want to delete this preset? This cannot be undone.',
+      source: 'Source',
+      inheritsFrom: 'Inherits',
+      filamentType: 'Type',
+      vendor: 'Vendor',
+      compatiblePrinters: 'Printers',
+      nozzleTemp: 'Nozzle Temp',
+      cost: 'Cost',
+      density: 'Density',
+      pressureAdvance: 'Pressure Advance',
+      filament: 'Filament',
+      process: 'Process',
+      printer: 'Printer',
+      toast: {
+        importSuccess: '{{count}} preset(s) imported',
+        importSkipped: '{{count}} preset(s) skipped (duplicates)',
+        importError: '{{count}} error(s) during import',
+        deleted: 'Preset deleted',
+        updated: 'Preset updated',
+      },
     },
     connectedAs: 'Connected as',
     logout: 'Logout',
@@ -1803,6 +1936,12 @@ export default {
   support: {
     debugLoggingActive: 'Debug logging is active',
     manageLogs: 'Manage',
+    collectItem7: 'Printer connectivity and firmware versions',
+    collectItem8: 'Integration status (Spoolman, MQTT, HA)',
+    collectItem9: 'Network interfaces (subnets only)',
+    collectItem10: 'Python package versions',
+    collectItem11: 'Database health checks',
+    collectItem12: 'Docker environment details',
   },
 
   // File manager
@@ -2179,6 +2318,7 @@ export default {
     linkSuccess: 'Spool linked to Spoolman successfully',
     linkFailed: 'Failed to link spool',
     spoolId: 'Spool ID',
+    fillSourceLabel: '(Spoolman)',
     weight: 'Weight',
     remaining: 'Remaining',
     disableWeightSync: 'Disable AMS Estimated Weight Sync',
@@ -2240,6 +2380,9 @@ export default {
     noPrintersAvailable: 'No printers available',
     printerBusy: 'Printer is busy',
     printerOffline: 'Printer is offline',
+    sameTypeDifferentColor: 'Same type, different color',
+    filamentTypeNotLoaded: 'Filament type not loaded',
+    openCalendar: 'Open calendar',
   },
 
   // Backup
@@ -2292,6 +2435,7 @@ export default {
   },
 
   // Edit archive modal
+  // Edit Archive Modal
   editArchive: {
     title: 'Edit Archive',
     name: 'Name',
@@ -2486,11 +2630,11 @@ export default {
       noPrinters: 'No printers configured. Add a printer first to use proxy mode.',
     },
     remoteInterface: {
-      title: 'Slicer Network Interface',
-      configured: 'SSDP proxy enabled',
-      optional: 'Optional - for SSDP discovery across networks',
-      placeholder: 'Select interface for slicer network...',
-      hint: 'Select the network interface connected to the slicer. Enables automatic printer discovery in Bambu Studio.',
+      title: 'Network Interface Override',
+      configured: 'Interface override active',
+      optional: 'Optional - use if auto-detected IP is wrong (e.g. multiple NICs, Docker, VPN)',
+      placeholder: 'Auto-detect (default)...',
+      hint: 'Override the IP address advertised via SSDP and used in the TLS certificate. Useful when Bambuddy has multiple network interfaces.',
     },
     mode: {
       title: 'Mode',
@@ -2594,4 +2738,348 @@ export default {
     replaceCarbonFilter: 'Replace activated carbon filter',
     lubricateLeftNozzleRail: 'Lubricate left nozzle rail (H2 series)',
   },
+
+  // Smart Plugs
+  smartPlugs: {
+    offline: 'Offline',
+    admin: 'Admin',
+    openPlugAdminPage: 'Open plug admin page',
+    deleteSmartPlug: 'Delete Smart Plug',
+    turnOnSmartPlug: 'Turn On Smart Plug',
+    turnOffSmartPlug: 'Turn Off Smart Plug',
+    turnOn: 'Turn On',
+    turnOff: 'Turn Off',
+    addSmartPlug: {
+      scanningNetwork: 'Scanning network...',
+      chooseEntity: 'Choose an entity...',
+      connectionFailed: 'Connection failed',
+      searchEntities: 'Search entities...',
+      searchPowerSensors: 'Search power sensors...',
+      searchEnergySensors: 'Search energy sensors...',
+      placeholders: {
+        plugName: 'Living Room Plug',
+        mqttStateOnValue: 'ON, true, 1',
+        mqttSameAsPower: 'Same as power topic, or different',
+      },
+    },
+  },
+
+  // Rich Text Editor
+  richTextEditor: {
+    bold: 'Bold',
+    italic: 'Italic',
+    underline: 'Underline',
+    bulletList: 'Bullet List',
+    numberedList: 'Numbered List',
+    alignLeft: 'Align Left',
+    alignCenter: 'Align Center',
+    alignRight: 'Align Right',
+    addLink: 'Add Link',
+    removeLink: 'Remove Link',
+  },
+
+  // External Links
+  externalLinks: {
+    noLinksConfigured: 'No external links configured',
+    deleteLink: 'Delete Link',
+    removeCustomIcon: 'Remove custom icon',
+    placeholders: {
+      linkName: 'My Link',
+    },
+  },
+
+  // Keyboard Shortcuts Modal
+  keyboardShortcuts: {
+    title: 'Keyboard Shortcuts',
+    navigation: 'Navigation',
+    archivesSection: 'Archives',
+    kProfilesSection: 'K-Profiles',
+    generalSection: 'General',
+    shortcuts: {
+      goToPrinters: 'Go to Printers',
+      goToArchives: 'Go to Archives',
+      goToQueue: 'Go to Queue',
+      goToStats: 'Go to Statistics',
+      goToProfiles: 'Go to Cloud Profiles',
+      goToSettings: 'Go to Settings',
+      focusSearch: 'Focus search',
+      openUploadModal: 'Open upload modal',
+      clearSelection: 'Clear selection / blur input',
+      contextMenu: 'Context menu on cards',
+      refreshProfiles: 'Refresh profiles',
+      newProfile: 'New profile',
+      exitSelectionMode: 'Exit selection mode',
+      showHelp: 'Show this help',
+    },
+    footer: 'Press Esc or click outside to close',
+  },
+
+  // Notification Log
+  notificationLog: {
+    title: 'Notification Log',
+    events: {
+      printStarted: 'Print Started',
+      printComplete: 'Print Complete',
+      printFailed: 'Print Failed',
+      printStopped: 'Print Stopped',
+      progress: 'Progress',
+      printerOffline: 'Printer Offline',
+      printerError: 'Printer Error',
+      lowFilament: 'Low Filament',
+      maintenanceDue: 'Maintenance Due',
+      test: 'Test',
+    },
+    timeAgo: {
+      justNow: 'Just now',
+      minutesAgo: '{{minutes}}m ago',
+      hoursAgo: '{{hours}}h ago',
+    },
+  },
+
+  // Restore/Backup Modal
+  restoreBackup: {
+    title: 'Restore Backup',
+    restoring: 'Restoring...',
+    restoreComplete: 'Restore Complete',
+    restoreFailed: 'Restore Failed',
+    importSettings: 'Import settings from a backup file',
+    pleaseWait: 'Please wait while your data is being restored',
+    clickToSelect: 'Click to select backup file (.json or .zip)',
+    howDuplicateHandling: 'How duplicate handling works:',
+    categories: {
+      printers: 'Printers',
+      smartPlugs: 'Smart Plugs',
+      notificationProviders: 'Notification Providers',
+      filaments: 'Filaments',
+      archives: 'Archives',
+      pendingUploads: 'Pending Uploads',
+      settingsTemplates: 'Settings & Templates',
+    },
+    matchingInfo: {
+      printers: 'matched by serial number',
+      smartPlugs: 'matched by IP address',
+      notificationProviders: 'matched by name',
+      filaments: 'matched by name + type + brand',
+      archives: 'matched by content hash',
+      pendingUploads: 'matched by filename',
+      settingsTemplates: 'always overwritten',
+    },
+    replaceExisting: 'Replace existing data',
+    keepExisting: 'Keep existing data',
+    replaceDescription: 'Overwrite items that already exist with backup data',
+    keepDescription: 'Only restore items that don\'t already exist',
+    caution: 'Caution:',
+    cautionText: 'Overwriting will replace your current configurations with backup data. Printer access codes are never overwritten for security.',
+    itemsRestored: 'Items Restored',
+    itemsSkipped: 'Items Skipped',
+    restored: 'Restored',
+    skipped: 'Skipped (already exist)',
+    filesLabel: 'Files (3MF, thumbnails, etc.)',
+    newApiKeysGenerated: 'New API Keys Generated',
+    newApiKeysWarning: 'These keys are only shown once. Copy them now!',
+    processingBackup: 'Processing backup file...',
+    noDataFound: 'No data was found to restore in the backup file.',
+    failedToRestore: 'Failed to restore backup. Please check the file format.',
+  },
+
+  // Backup Export Modal
+  backupExport: {
+    title: 'Export Backup',
+    selectData: 'Select data to include',
+    selectAll: 'Select All',
+    selectNone: 'Select None',
+    categoryDescriptions: {
+      settings: 'Language, theme, update preferences',
+      notifications: 'ntfy, Pushover, Discord, etc.',
+      templates: 'Custom message templates',
+      smartPlugs: 'Tasmota plug configurations',
+      externalLinks: 'Sidebar links to external services',
+      printers: 'Printer info (access codes excluded)',
+      plateDetection: 'Empty plate reference images',
+      filaments: 'Filament types and costs',
+      maintenance: 'Custom maintenance schedules',
+      archives: 'All print data + files (3MF, thumbnails, photos)',
+      projects: 'Projects, BOM items, and attachments',
+      pendingUploads: 'Virtual printer uploads awaiting review',
+      apiKeys: 'Webhook API keys (new keys generated on import)',
+    },
+    requiresPrinters: 'Requires Printers to be selected',
+    zipFileWarning: 'ZIP file will be created.',
+    zipFileDescription: 'Includes all 3MF files, thumbnails, timelapses, and photos. This may take a while and result in a large file.',
+    includeAccessCodes: 'Include Access Codes',
+    includeAccessCodesDescription: 'For transferring to another machine',
+    includeAccessCodesWarning: 'Access codes will be included in plain text. Keep this backup file secure!',
+    categoriesSelected: '{{selectedCount}} categories selected',
+  },
+
+  // Pending Uploads Panel
+  pendingUploads: {
+    placeholders: {
+      notes: 'Add notes about this print...',
+    },
+    discardUpload: 'Discard Upload',
+    archiveAllUploads: 'Archive All Uploads',
+    discardAllUploads: 'Discard All Uploads',
+    archive: 'Archive',
+    timeAgo: {
+      justNow: 'Just now',
+      minutesAgo: '{{minutes}}m ago',
+      hoursAgo: '{{hours}}h ago',
+      daysAgo: '{{days}}d ago',
+    },
+  },
+
+  // API Browser
+  apiBrowser: {
+    placeholders: {
+      requestBody: 'JSON request body...',
+      searchEndpoints: 'Search endpoints...',
+    },
+  },
+
+  // Configure AMS Slot Modal
+  configureAmsSlot: {
+    searchPresets: 'Search presets...',
+    colorPlaceholder: 'Color name or hex (e.g., brown, FF8800)',
+    clearCustomColor: 'Clear custom color',
+    noCloudPresets: 'No cloud presets. Login to Bambu Cloud to sync.',
+    noMatchingPresets: 'No matching presets found.',
+    custom: 'Custom',
+    settingsSentToPrinter: 'Settings sent to printer',
+    filamentProfile: 'Filament Profile',
+  },
+
+  // GitHub Backup Settings
+  githubBackup: {
+    title: 'GitHub Backup',
+    history: 'History',
+    downloadBackup: 'Download Backup',
+    restoreBackup: 'Restore Backup',
+    noBackupsYet: 'No backups yet',
+  },
+
+  // Email Settings
+  emailSettings: {
+    placeholders: {
+      fromName: 'BamBuddy',
+    },
+  },
+
+  // Tag Management Modal
+  tagManagement: {
+    searchTags: 'Search tags...',
+    renameTag: 'Rename tag',
+    deleteTag: 'Delete tag',
+  },
+
+  // Notification Template Editor
+  notificationTemplates: {
+    placeholders: {
+      title: 'Notification title...',
+      body: 'Notification body...',
+    },
+  },
+
+  // Batch Tag Modal
+  batchTag: {
+    placeholders: {
+      newTag: 'Enter new tag...',
+    },
+  },
+
+  // Photo Gallery Modal
+  photoGallery: {
+    deletePhoto: 'Delete Photo',
+  },
+
+  // Filament Hover Card
+  filamentHoverCard: {
+    copySpoolUuid: 'Copy spool UUID',
+  },
+
+  // K Profiles View
+  kProfilesView: {
+    hasNote: 'Has note',
+    copyProfile: 'Copy profile',
+  },
+
+  // Layout/Navigation
+  layout: {
+    openMenu: 'Open menu',
+    noPermissionSystemInfo: 'You do not have permission to view system information',
+  },
+
+  // Dashboard
+  dashboard: {
+    dragToReorder: 'Drag to reorder',
+    hideWidget: 'Hide widget',
+  },
+
+  // Notification Provider Card
+  notificationProviderCard: {
+    deleteNotificationProvider: 'Delete Notification Provider',
+  },
+
+  // File Manager Modal
+  fileManagerModal: {
+    closeFileManager: 'Close file manager',
+    sortFiles: 'Sort files',
+    goToParentFolder: 'Go to parent folder',
+    threeView: '3D View',
+  },
+
+  // Embedded Camera Viewer
+  embeddedCameraViewer: {
+    refreshStream: 'Refresh stream',
+    close: 'Close',
+    zoomOut: 'Zoom out',
+    resetZoom: 'Reset zoom',
+    zoomIn: 'Zoom in',
+    dragToResize: 'Drag to resize',
+  },
+
+  // Timelapse Viewer
+  timelapseViewer: {
+    skipBack5s: 'Skip back 5s',
+    skipForward5s: 'Skip forward 5s',
+  },
+
+  // Notification Providers
+  notificationProviders: {
+    descriptions: {
+      email: 'SMTP email notifications',
+      telegram: 'Notifications via Telegram bot',
+      discord: 'Send to Discord channel via webhook',
+      ntfy: 'Free, self-hostable push notifications',
+      pushover: 'Simple, reliable push notifications',
+      callmebot: 'Free WhatsApp notifications via CallMeBot',
+      webhook: 'Generic HTTP POST to any URL',
+    },
+  },
+
+  // Log Viewer
+  logViewer: {
+    searchPlaceholder: 'Search message or logger name...',
+    noLogEntries: 'No log entries found',
+  },
+
+  // Switchbar Popover
+  switchbarPopover: {
+    noSwitchesInSwitchbar: 'No switches in switchbar',
+  },
+
+  // Project Page Modal
+  projectPageModal: {
+    placeholders: {
+      title: 'Title',
+      designer: 'Designer',
+      license: 'License',
+      description: 'Enter description...',
+      profileTitle: 'Profile Title',
+      profileDescription: 'Profile description...',
+    },
+  },
+
+  // Spoolman Settings
+  spoolmanSettings: {},
 };

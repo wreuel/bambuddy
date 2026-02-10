@@ -38,7 +38,7 @@ MODEL_TO_API_KEY = {
     "A1-Mini": "a1-mini",
     "A1mini": "a1-mini",
     "H2D": "h2d",
-    "H2C": "h2d",  # H2C uses same firmware as H2D
+    "H2C": "h2c",
     "H2S": "h2s",
     "P2S": "p2s",
     "X1E": "x1e",
@@ -54,6 +54,7 @@ API_KEY_TO_DEV_MODEL = {
     "a1": "N2S",
     "a1-mini": "N1",
     "h2d": "O1D",
+    "h2c": "O1C",
     "h2s": "O1S",
     "p2s": "N7",
     "x1e": "C13",

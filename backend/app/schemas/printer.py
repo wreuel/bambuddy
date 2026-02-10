@@ -6,7 +6,11 @@ from pydantic import BaseModel, Field
 class PrinterBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     serial_number: str = Field(..., min_length=1, max_length=50)
-    ip_address: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
+    ip_address: str = Field(
+        ...,
+        max_length=253,
+        pattern=r"^(\d{1,3}(\.\d{1,3}){3}|[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*)$",
+    )
     access_code: str = Field(..., min_length=1, max_length=20)
     model: str | None = None
     location: str | None = None  # Group/location name
@@ -31,7 +35,11 @@ class PlateDetectionROI(BaseModel):
 
 class PrinterUpdate(BaseModel):
     name: str | None = None
-    ip_address: str | None = None
+    ip_address: str | None = Field(
+        default=None,
+        max_length=253,
+        pattern=r"^(\d{1,3}(\.\d{1,3}){3}|[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*)$",
+    )
     access_code: str | None = None
     model: str | None = None
     location: str | None = None
@@ -137,6 +145,21 @@ class NozzleInfoResponse(BaseModel):
     nozzle_diameter: str = ""  # e.g., "0.4"
 
 
+class NozzleRackSlot(BaseModel):
+    """H2C nozzle rack slot (6-position tool-changer dock)."""
+
+    id: int = 0
+    nozzle_type: str = ""
+    nozzle_diameter: str = ""
+    wear: int | None = None
+    stat: int | None = None  # Nozzle status (e.g. mounted/docked)
+    max_temp: int = 0  # Max temperature rating °C (0 = not set)
+    serial_number: str = ""  # Nozzle serial number
+    filament_color: str = ""  # RGBA hex ("00000000" = no filament)
+    filament_id: str = ""  # Bambu filament ID
+    filament_type: str = ""  # Material type (e.g. "PLA", "PETG")
+
+
 class PrintOptionsResponse(BaseModel):
     """AI detection and print options from xcam data."""
 
@@ -183,6 +206,7 @@ class PrinterStatus(BaseModel):
     ipcam: bool = False  # Live view enabled
     wifi_signal: int | None = None  # WiFi signal strength in dBm
     nozzles: list[NozzleInfoResponse] = []  # Nozzle hardware info (index 0=left/primary, 1=right)
+    nozzle_rack: list[NozzleRackSlot] = []  # H2C 6-nozzle tool-changer rack
     print_options: PrintOptionsResponse | None = None  # AI detection and print options
     # Calibration stage tracking
     stg_cur: int = -1  # Current stage number (-1 = not calibrating)

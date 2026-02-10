@@ -65,9 +65,11 @@ async def init_db():
         group,
         kprofile_note,
         library,
+        local_preset,
         maintenance,
         notification,
         notification_template,
+        orca_base_cache,
         pending_upload,
         print_queue,
         printer,
@@ -1099,6 +1101,20 @@ async def run_migrations(conn):
             )
         """)
         )
+    except OperationalError:
+        pass  # Already applied
+
+    # Migration: Add preset_source column to slot_preset_mappings for local preset support
+    try:
+        await conn.execute(
+            text("ALTER TABLE slot_preset_mappings ADD COLUMN preset_source VARCHAR(20) DEFAULT 'cloud'")
+        )
+    except OperationalError:
+        pass  # Already applied
+
+    # Migration: Add email column to users for Advanced Auth (PR #322)
+    try:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
     except OperationalError:
         pass  # Already applied
 
