@@ -959,7 +959,7 @@ export function AddSmartPlugModal({ plug, onClose }: AddSmartPlugModalProps) {
                         type="text"
                         value={mqttPowerTopic}
                         onChange={(e) => setMqttPowerTopic(e.target.value)}
-                        placeholder={t('smartPlugs.addSmartPlug.placeholders.mqttPowerTopic')}
+                        placeholder="zigbee2mqtt/shelly-working-room"
                         className="w-full px-3 py-2 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded-lg text-white placeholder-bambu-gray focus:border-bambu-green focus:outline-none"
                       />
                     </div>
@@ -970,7 +970,7 @@ export function AddSmartPlugModal({ plug, onClose }: AddSmartPlugModalProps) {
                           type="text"
                           value={mqttPowerPath}
                           onChange={(e) => setMqttPowerPath(e.target.value)}
-                          placeholder={t('smartPlugs.addSmartPlug.placeholders.mqttPowerPath')}
+                          placeholder="power_l1"
                           className="w-full px-3 py-2 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded-lg text-white placeholder-bambu-gray focus:border-bambu-green focus:outline-none"
                         />
                       </div>
@@ -1011,7 +1011,7 @@ export function AddSmartPlugModal({ plug, onClose }: AddSmartPlugModalProps) {
                           type="text"
                           value={mqttEnergyPath}
                           onChange={(e) => setMqttEnergyPath(e.target.value)}
-                          placeholder={t('smartPlugs.addSmartPlug.placeholders.mqttEnergyPath')}
+                          placeholder="energy_l1"
                           className="w-full px-3 py-2 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded-lg text-white placeholder-bambu-gray focus:border-bambu-green focus:outline-none"
                         />
                       </div>
@@ -1052,7 +1052,7 @@ export function AddSmartPlugModal({ plug, onClose }: AddSmartPlugModalProps) {
                           type="text"
                           value={mqttStatePath}
                           onChange={(e) => setMqttStatePath(e.target.value)}
-                          placeholder={t('smartPlugs.addSmartPlug.placeholders.mqttStatePath')}
+                          placeholder="state_l1"
                           className="w-full px-3 py-2 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded-lg text-white placeholder-bambu-gray focus:border-bambu-green focus:outline-none"
                         />
                       </div>
@@ -1089,7 +1089,7 @@ export function AddSmartPlugModal({ plug, onClose }: AddSmartPlugModalProps) {
                     setIpAddress(e.target.value);
                     setTestResult(null);
                   }}
-                  placeholder={t('smartPlugs.addSmartPlug.placeholders.ipAddress')}
+                  placeholder="192.168.1.100"
                   className="flex-1 px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
                 />
                 <Button
@@ -1143,7 +1143,7 @@ export function AddSmartPlugModal({ plug, onClose }: AddSmartPlugModalProps) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={t('smartPlugs.addSmartPlug.placeholders.name')}
+              placeholder={t('smartPlugs.addSmartPlug.placeholders.plugName')}
               className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
             />
           </div>
@@ -1158,7 +1158,7 @@ export function AddSmartPlugModal({ plug, onClose }: AddSmartPlugModalProps) {
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder={t('smartPlugs.addSmartPlug.placeholders.username')}
+                    placeholder="admin"
                     className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
                   />
                 </div>
@@ -1168,7 +1168,7 @@ export function AddSmartPlugModal({ plug, onClose }: AddSmartPlugModalProps) {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={t('smartPlugs.addSmartPlug.placeholders.password')}
+                    placeholder="********"
                     className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
                   />
                 </div>
@@ -1227,7 +1227,7 @@ export function AddSmartPlugModal({ plug, onClose }: AddSmartPlugModalProps) {
                       type="number"
                       value={powerAlertHigh}
                       onChange={(e) => setPowerAlertHigh(e.target.value)}
-                      placeholder={t('smartPlugs.addSmartPlug.placeholders.powerAlertHigh')}
+                      placeholder="e.g. 200"
                       min="0"
                       max="5000"
                       className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
@@ -1239,7 +1239,7 @@ export function AddSmartPlugModal({ plug, onClose }: AddSmartPlugModalProps) {
                       type="number"
                       value={powerAlertLow}
                       onChange={(e) => setPowerAlertLow(e.target.value)}
-                      placeholder={t('smartPlugs.addSmartPlug.placeholders.powerAlertLow')}
+                      placeholder="e.g. 10"
                       min="0"
                       max="5000"
                       className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"

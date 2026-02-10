@@ -2633,10 +2633,6 @@ export default {
     printResult: '印刷結果',
     photosDescription: '+をクリックして印刷結果の写真を追加',
     saving: '保存中...',
-    placeholders: {
-      copies: '1',
-      sourceUrl: 'https://printables.com/model/...',
-    },
   },
 
   // MQTTデバッグ
@@ -3262,18 +3258,8 @@ export default {
       searchPowerSensors: '電力センサーを検索...',
       searchEnergySensors: 'エネルギーセンサーを検索...',
       placeholders: {
-        mqttTopic: 'zigbee2mqtt/shelly-working-room',
-        mqttPowerPath: 'power_l1',
-        mqttEnergyPath: 'energy_l1',
-        mqttStatePath: 'state_l1',
-        mqttStateOnValue: 'ON, true, 1',
-        mqttMultiplier: '1',
-        ipAddress: '192.168.1.100',
         plugName: 'リビングルームプラグ',
-        username: 'admin',
-        password: '********',
-        wattThreshold: '例: 200',
-        kwThreshold: '例: 10',
+        mqttStateOnValue: 'ON, true, 1',
         mqttSameAsPower: '電力トピックと同じ、または異なる',
       },
     },
@@ -3286,7 +3272,6 @@ export default {
     removeCustomIcon: 'カスタムアイコンを削除',
     placeholders: {
       linkName: 'マイリンク',
-      linkUrl: 'https://example.com',
     },
   },
 
@@ -3405,22 +3390,12 @@ export default {
   },
 
   // GitHub Backup Settings (additional keys)
-  githubBackupSettings: {
-    placeholders: {
-      repoUrl: 'https://github.com/username/bambuddy-backup',
-      branch: 'main',
-    },
-  },
+  githubBackupSettings: {},
 
   // Email Settings
   emailSettings: {
     placeholders: {
-      smtpServer: 'smtp.gmail.com',
-      smtpPort: '587',
-      smtpUser: 'your.email@gmail.com',
-      fromAddress: 'your@email.com',
       fromName: 'BamBuddy',
-      testEmail: 'test@example.com',
     },
   },
 
@@ -3528,9 +3503,5 @@ export default {
   },
 
   // Spoolman Settings
-  spoolmanSettings: {
-    placeholders: {
-      serverUrl: 'http://192.168.1.100:7912',
-    },
-  },
+  spoolmanSettings: {},
 };

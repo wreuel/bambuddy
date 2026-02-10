@@ -2370,10 +2370,6 @@ export default {
     photosHelp: 'Click + to add photos of your printed result',
     printResult: 'Print result',
     saving: 'Saving...',
-    placeholders: {
-      copies: '1',
-      sourceUrl: 'https://printables.com/model/...',
-    },
     // Failure reasons
     failureReasons: {
       adhesionFailure: 'Adhesion failure',
@@ -2667,18 +2663,8 @@ export default {
       searchPowerSensors: 'Search power sensors...',
       searchEnergySensors: 'Search energy sensors...',
       placeholders: {
-        mqttTopic: 'zigbee2mqtt/shelly-working-room',
-        mqttPowerPath: 'power_l1',
-        mqttEnergyPath: 'energy_l1',
-        mqttStatePath: 'state_l1',
-        mqttStateOnValue: 'ON, true, 1',
-        mqttMultiplier: '1',
-        ipAddress: '192.168.1.100',
         plugName: 'Living Room Plug',
-        username: 'admin',
-        password: '********',
-        wattThreshold: 'e.g. 200',
-        kwThreshold: 'e.g. 10',
+        mqttStateOnValue: 'ON, true, 1',
         mqttSameAsPower: 'Same as power topic, or different',
       },
     },
@@ -2705,7 +2691,6 @@ export default {
     removeCustomIcon: 'Remove custom icon',
     placeholders: {
       linkName: 'My Link',
-      linkUrl: 'https://example.com',
     },
   },
 
@@ -2836,7 +2821,6 @@ export default {
   // Pending Uploads Panel
   pendingUploads: {
     placeholders: {
-      tags: 'e.g., functional, prototype, gift',
       notes: 'Add notes about this print...',
     },
     discardUpload: 'Discard Upload',
@@ -2878,21 +2862,12 @@ export default {
     downloadBackup: 'Download Backup',
     restoreBackup: 'Restore Backup',
     noBackupsYet: 'No backups yet',
-    placeholders: {
-      repoUrl: 'https://github.com/username/bambuddy-backup',
-      branch: 'main',
-    },
   },
 
   // Email Settings
   emailSettings: {
     placeholders: {
-      smtpServer: 'smtp.gmail.com',
-      smtpPort: '587',
-      smtpUser: 'your.email@gmail.com',
-      fromAddress: 'your@email.com',
       fromName: 'BamBuddy',
-      testEmail: 'test@example.com',
     },
   },
 
@@ -3012,9 +2987,5 @@ export default {
   },
 
   // Spoolman Settings
-  spoolmanSettings: {
-    placeholders: {
-      serverUrl: 'http://192.168.1.100:7912',
-    },
-  },
+  spoolmanSettings: {},
 };
