@@ -873,6 +873,14 @@ async def on_print_start(printer_id: int, data: dict):
 
         logger.info("[CALLBACK] Print start detected - filename: %s, subtask: %s", filename, subtask_name)
 
+        # Skip calibration prints — internal printer files should not be archived
+        # Bambu calibration gcode lives under /usr/ (e.g. /usr/etc/print/auto_cali_for_user.gcode)
+        if filename and filename.startswith("/usr/"):
+            logger.info("[CALLBACK] Skipping archive — internal printer file detected: %s", filename)
+            if not notification_sent:
+                await _send_print_start_notification(printer_id, data, logger=logger)
+            return
+
         if not filename and not subtask_name:
             # Send notification without archive data (no filename)
             logger.info("[CALLBACK] Skipping archive - no filename or subtask_name")
@@ -1401,33 +1409,105 @@ async def on_print_start(printer_id: int, data: dict):
                 temp_path.unlink()
 
 
-async def _scan_for_timelapse_with_retries(archive_id: int):
-    """
-    Scan for timelapse with retries.
+async def _list_timelapse_mp4s(printer) -> tuple[list[dict], str | None]:
+    """List MP4 files from printer's timelapse directory.
 
-    The printer encodes the timelapse quickly after print completion.
-    We just need a short delay then grab the most recent file.
-
-    Since we KNOW timelapse was active (from MQTT ipcam data), the most recent
-    file in /timelapse is our target. Retries handle FTP connection issues.
+    Returns (mp4_files, found_path) where mp4_files is a list of file dicts
+    and found_path is the directory where they were found, or ([], None).
     """
+    from backend.app.services.bambu_ftp import list_files_async
+
     logger = logging.getLogger(__name__)
 
-    # Short delays - printer usually finishes encoding within seconds
-    retry_delays = [5, 10, 20]
+    for timelapse_path in ["/timelapse", "/timelapse/video", "/record", "/recording"]:
+        try:
+            found_files = await list_files_async(
+                printer.ip_address, printer.access_code, timelapse_path, printer_model=printer.model
+            )
+            if found_files:
+                mp4_files = [f for f in found_files if not f.get("is_directory") and f.get("name", "").endswith(".mp4")]
+                if mp4_files:
+                    return mp4_files, timelapse_path
+        except Exception as e:
+            logger.debug("[TIMELAPSE] Path %s failed: %s", timelapse_path, e)
+            continue
+
+    return [], None
+
+
+async def _scan_for_timelapse_with_retries(archive_id: int):
+    """
+    Scan for timelapse with retries using a snapshot-diff approach.
+
+    Instead of picking the "most recent by mtime" (unreliable when the printer
+    clock is wrong in LAN-only mode), we snapshot existing MP4 filenames BEFORE
+    waiting, then look for any NEW filename that appears after each delay.
+
+    Falls back to name-matching (print name contained in MP4 filename) if no
+    new file appears after all retries.
+    """
+    from pathlib import Path
+
+    logger = logging.getLogger(__name__)
+
+    # --- Phase 1: Take baseline snapshot of existing timelapse files ---
+    try:
+        async with async_session() as db:
+            from backend.app.models.printer import Printer
+
+            service = ArchiveService(db)
+            archive = await service.get_archive(archive_id)
+
+            if not archive:
+                logger.warning("[TIMELAPSE] Archive %s not found, aborting", archive_id)
+                return
+            if archive.timelapse_path:
+                logger.info("[TIMELAPSE] Archive %s already has timelapse attached", archive_id)
+                return
+            if not archive.printer_id:
+                logger.warning("[TIMELAPSE] Archive %s has no printer, aborting", archive_id)
+                return
+
+            result = await db.execute(select(Printer).where(Printer.id == archive.printer_id))
+            printer = result.scalar_one_or_none()
+            if not printer:
+                logger.warning("[TIMELAPSE] Printer not found for archive %s, aborting", archive_id)
+                return
+
+            # Snapshot current MP4 filenames as baseline
+            baseline_files, _ = await _list_timelapse_mp4s(printer)
+            baseline_names: set[str] = {f.get("name", "") for f in baseline_files}
+            logger.info(
+                "[TIMELAPSE] Baseline snapshot: %s existing MP4 files for archive %s", len(baseline_names), archive_id
+            )
+
+            # Derive base_name for name-matching fallback
+            base_name = Path(archive.filename).stem if archive.filename else ""
+            if base_name.endswith(".gcode"):
+                base_name = base_name[:-6]
+
+    except Exception as e:
+        logger.warning("[TIMELAPSE] Failed to take baseline snapshot for archive %s: %s", archive_id, e)
+        return
+
+    # --- Phase 2: Retry loop — look for NEW files that weren't in baseline ---
+    retry_delays = [5, 10, 20, 30]
 
     for attempt, delay in enumerate(retry_delays, 1):
         logger.info(
-            f"[TIMELAPSE] Attempt {attempt}/{len(retry_delays)}: waiting {delay}s before scanning for archive {archive_id}"
+            "[TIMELAPSE] Attempt %s/%s: waiting %ss before scanning for archive %s",
+            attempt,
+            len(retry_delays),
+            delay,
+            archive_id,
         )
         await asyncio.sleep(delay)
 
         try:
             async with async_session() as db:
                 from backend.app.models.printer import Printer
-                from backend.app.services.bambu_ftp import download_file_bytes_async, list_files_async
+                from backend.app.services.bambu_ftp import download_file_bytes_async
 
-                # Get archive (ArchiveService from module-level import)
                 service = ArchiveService(db)
                 archive = await service.get_archive(archive_id)
 
@@ -1437,87 +1517,99 @@ async def _scan_for_timelapse_with_retries(archive_id: int):
                 if archive.timelapse_path:
                     logger.info("[TIMELAPSE] Archive %s already has timelapse attached, stopping retries", archive_id)
                     return
-                if not archive.printer_id:
-                    logger.warning("[TIMELAPSE] Archive %s has no printer, stopping retries", archive_id)
-                    return
 
-                # Get printer
                 result = await db.execute(select(Printer).where(Printer.id == archive.printer_id))
                 printer = result.scalar_one_or_none()
-
                 if not printer:
                     logger.warning("[TIMELAPSE] Printer not found for archive %s, stopping retries", archive_id)
                     return
 
-                # Scan timelapse directory on printer
-                # H2D may store in different locations than X1C
-                files = []
-                found_path = None
-                for timelapse_path in ["/timelapse", "/timelapse/video", "/record", "/recording"]:
-                    try:
-                        found_files = await list_files_async(
-                            printer.ip_address, printer.access_code, timelapse_path, printer_model=printer.model
-                        )
-                        if found_files:
-                            files = found_files
-                            found_path = timelapse_path
-                            logger.info(
-                                "[TIMELAPSE] Attempt %s: Found %s files in %s", attempt, len(files), timelapse_path
-                            )
-                            break
-                    except Exception as e:
-                        logger.debug("[TIMELAPSE] Path %s failed: %s", timelapse_path, e)
-                        continue
-
-                if not files:
-                    logger.info("[TIMELAPSE] Attempt %s: No timelapse files found on printer, will retry", attempt)
-                    continue
-
-                mp4_files = [f for f in files if not f.get("is_directory") and f.get("name", "").endswith(".mp4")]
-
-                # Log ALL mp4 files found for debugging
-                logger.info("[TIMELAPSE] Attempt %s: Found %s MP4 files in %s", attempt, len(mp4_files), found_path)
-                for f in mp4_files[:5]:  # Log first 5
-                    logger.info("[TIMELAPSE]   - %s, mtime=%s", f.get("name"), f.get("mtime"))
+                mp4_files, found_path = await _list_timelapse_mp4s(printer)
 
                 if not mp4_files:
                     logger.info("[TIMELAPSE] Attempt %s: No MP4 files found, will retry", attempt)
                     continue
 
-                # Sort by mtime descending to get most recent file
-                mp4_files_with_mtime = [f for f in mp4_files if f.get("mtime")]
-                if not mp4_files_with_mtime:
-                    logger.info("[TIMELAPSE] Attempt %s: No MP4 files with mtime found, will retry", attempt)
-                    continue
+                logger.info("[TIMELAPSE] Attempt %s: Found %s MP4 files in %s", attempt, len(mp4_files), found_path)
+                for f in mp4_files[:5]:
+                    logger.info("[TIMELAPSE]   - %s", f.get("name"))
 
-                mp4_files_with_mtime.sort(key=lambda x: x.get("mtime"), reverse=True)
-                most_recent = mp4_files_with_mtime[0]
+                # Find files that are NEW (not in baseline snapshot)
+                new_files = [f for f in mp4_files if f.get("name", "") not in baseline_names]
 
-                file_name = most_recent.get("name")
-                logger.info("[TIMELAPSE] Attempt %s: Most recent file: %s", attempt, file_name)
+                if new_files:
+                    # Pick the first new file (there should typically be exactly one)
+                    target = new_files[0]
+                    file_name = target.get("name")
+                    remote_path = target.get("path") or f"/timelapse/{file_name}"
+                    logger.info(
+                        "[TIMELAPSE] Attempt %s: New file detected: %s (downloading for archive %s)",
+                        attempt,
+                        file_name,
+                        archive_id,
+                    )
 
-                # Since we KNOW timelapse was active (from MQTT), just grab the most recent file
-                remote_path = most_recent.get("path") or f"/timelapse/{file_name}"
-                logger.info("[TIMELAPSE] Downloading %s for archive %s", file_name, archive_id)
-                timelapse_data = await download_file_bytes_async(
-                    printer.ip_address, printer.access_code, remote_path, printer_model=printer.model
-                )
-
-                if timelapse_data:
-                    success = await service.attach_timelapse(archive_id, timelapse_data, file_name)
-                    if success:
-                        logger.info("[TIMELAPSE] Successfully attached timelapse to archive %s", archive_id)
-                        await ws_manager.send_archive_updated({"id": archive_id, "timelapse_attached": True})
-                        return  # Success!
+                    timelapse_data = await download_file_bytes_async(
+                        printer.ip_address, printer.access_code, remote_path, printer_model=printer.model
+                    )
+                    if timelapse_data:
+                        success = await service.attach_timelapse(archive_id, timelapse_data, file_name)
+                        if success:
+                            logger.info("[TIMELAPSE] Successfully attached timelapse to archive %s", archive_id)
+                            await ws_manager.send_archive_updated({"id": archive_id, "timelapse_attached": True})
+                            return
+                        else:
+                            logger.warning("[TIMELAPSE] Failed to attach timelapse to archive %s", archive_id)
                     else:
-                        logger.warning("[TIMELAPSE] Failed to attach timelapse to archive %s", archive_id)
+                        logger.warning("[TIMELAPSE] Attempt %s: Failed to download new file, will retry", attempt)
                 else:
-                    logger.warning("[TIMELAPSE] Attempt %s: Failed to download, will retry", attempt)
+                    logger.info("[TIMELAPSE] Attempt %s: No new files since baseline, will retry", attempt)
 
         except Exception as e:
             logger.warning("[TIMELAPSE] Attempt %s failed with error: %s", attempt, e)
 
-    logger.warning("[TIMELAPSE] All %s attempts exhausted for archive %s, giving up", len(retry_delays), archive_id)
+    # --- Phase 3: Fallback — try name matching against all files ---
+    if base_name:
+        logger.info("[TIMELAPSE] Retries exhausted, trying name-match fallback for '%s'", base_name)
+        try:
+            async with async_session() as db:
+                from backend.app.models.printer import Printer
+                from backend.app.services.bambu_ftp import download_file_bytes_async
+
+                service = ArchiveService(db)
+                archive = await service.get_archive(archive_id)
+                if not archive or archive.timelapse_path:
+                    return
+
+                result = await db.execute(select(Printer).where(Printer.id == archive.printer_id))
+                printer = result.scalar_one_or_none()
+                if not printer:
+                    return
+
+                mp4_files, found_path = await _list_timelapse_mp4s(printer)
+                for f in mp4_files:
+                    fname = f.get("name", "")
+                    if base_name.lower() in fname.lower():
+                        remote_path = f.get("path") or f"/timelapse/{fname}"
+                        logger.info("[TIMELAPSE] Name-match fallback: '%s' matches '%s'", base_name, fname)
+
+                        timelapse_data = await download_file_bytes_async(
+                            printer.ip_address, printer.access_code, remote_path, printer_model=printer.model
+                        )
+                        if timelapse_data:
+                            success = await service.attach_timelapse(archive_id, timelapse_data, fname)
+                            if success:
+                                logger.info(
+                                    "[TIMELAPSE] Name-match fallback attached timelapse to archive %s", archive_id
+                                )
+                                await ws_manager.send_archive_updated({"id": archive_id, "timelapse_attached": True})
+                                return
+                        break  # Only try the first name match
+
+        except Exception as e:
+            logger.warning("[TIMELAPSE] Name-match fallback failed: %s", e)
+
+    logger.warning("[TIMELAPSE] All attempts exhausted for archive %s, giving up", archive_id)
 
 
 async def on_print_complete(printer_id: int, data: dict):
