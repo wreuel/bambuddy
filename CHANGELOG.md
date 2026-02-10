@@ -2,7 +2,7 @@
 
 All notable changes to Bambuddy will be documented in this file.
 
-## [0.1.9b] - Not released
+## [0.1.9] - 2026-02-10
 
 ### New Features
 - **Advanced Authentication via Email** ([#322](https://github.com/maziggy/bambuddy/pull/322)) — Optional SMTP-based email integration for streamlined user onboarding and self-service password management. Admins configure SMTP settings and create users with just a username and email — the system generates a secure random password and emails it directly to the new user. Admins can trigger one-click password resets from User Management. Users can reset their own forgotten password from the login screen without contacting an admin. Includes customizable email templates for welcome emails and password resets. Username and email login is case-insensitive. Can be enabled or disabled independently at any time without affecting existing accounts.
@@ -14,7 +14,6 @@ All notable changes to Bambuddy will be documented in this file.
 - **Disable AMS Weight Sync Setting** ([#277](https://github.com/maziggy/bambuddy/pull/277)) — New toggle to prevent AMS percentage-based weight estimates from overwriting Spoolman's granular usage-based calculations. Includes conditional "Report Partial Usage for Failed Prints" toggle.
 - **Home Assistant Environment Variables** ([#283](https://github.com/maziggy/bambuddy/issues/283)) — Configure Home Assistant integration via `HA_URL` and `HA_TOKEN` environment variables for zero-configuration add-on deployments. Auto-enables when both variables are set. UI fields become read-only with lock icons when env-managed. Database values preserved as fallback.
 - **Spoolman Fill Level for AMS Lite / External Spools** ([#293](https://github.com/maziggy/bambuddy/issues/293)) — AMS Lite (no weight sensor) always reported 0% fill level. Now uses Spoolman's remaining weight as a fallback when AMS reports 0%. External spools also show fill level from Spoolman data. Fill bars and hover cards indicate "(Spoolman)" when the data source is Spoolman rather than AMS.
-
 - **Extended Support Bundle Diagnostics** — Support bundle now collects comprehensive diagnostic data for faster issue resolution: printer connectivity and firmware versions, integration status (Spoolman, MQTT, Home Assistant), network interfaces (subnets only), Python package versions, database health checks, Docker environment details, WebSocket connections, and log file info. All data properly anonymized — no IPs, names, or serials included. Privacy disclosure updated on System Info page.
 
 ### Improved
