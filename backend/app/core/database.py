@@ -1112,6 +1112,12 @@ async def run_migrations(conn):
     except OperationalError:
         pass  # Already applied
 
+    # Migration: Add email column to users for Advanced Auth (PR #322)
+    try:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
+    except OperationalError:
+        pass  # Already applied
+
 
 async def seed_notification_templates():
     """Seed default notification templates if they don't exist."""

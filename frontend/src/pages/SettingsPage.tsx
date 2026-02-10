@@ -446,18 +446,18 @@ export function SettingsPage() {
   const handleCreateUser = () => {
     // Use the status from the query hook
     const advancedAuthEnabled = advancedAuthStatus?.advanced_auth_enabled || false;
-    
+
     if (!userFormData.username) {
       showToast(t('settings.toast.fillRequiredFields'), 'error');
       return;
     }
-    
+
     // Email is required when advanced auth is enabled
     if (advancedAuthEnabled && !userFormData.email) {
       showToast('Email is required when advanced authentication is enabled', 'error');
       return;
     }
-    
+
     // Password validation only when advanced auth is disabled
     if (!advancedAuthEnabled) {
       if (!userFormData.password) {
@@ -473,7 +473,7 @@ export function SettingsPage() {
         return;
       }
     }
-    
+
     createUserMutation.mutate({
       username: userFormData.username,
       password: advancedAuthEnabled ? undefined : userFormData.password,
@@ -996,6 +996,9 @@ export function SettingsPage() {
         >
           <Mail className="w-4 h-4" />
           {t('settings.tabs.globalEmail') || 'Global Email'}
+          {advancedAuthStatus?.advanced_auth_enabled && (
+            <span className="w-2 h-2 rounded-full bg-green-400" />
+          )}
         </button>
         <button
           onClick={() => handleTabChange('notifications')}
@@ -4097,8 +4100,8 @@ export function SettingsPage() {
                 <Button
                   onClick={() => handleUpdateUser(editingUserId)}
                   disabled={
-                    updateUserMutation.isPending || 
-                    !userFormData.username || 
+                    updateUserMutation.isPending ||
+                    !userFormData.username ||
                     (advancedAuthStatus?.advanced_auth_enabled && !userFormData.email) ||
                     Boolean(!advancedAuthStatus?.advanced_auth_enabled && userFormData.password && (userFormData.password !== userFormData.confirmPassword || userFormData.password.length < 6))
                   }
@@ -4396,7 +4399,9 @@ export function SettingsPage() {
 
       {/* Email Tab */}
       {activeTab === 'email' && (
-        <EmailSettings />
+        <div className="max-w-2xl">
+          <EmailSettings />
+        </div>
       )}
 
       {/* Backup Tab */}

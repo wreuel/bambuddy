@@ -13,7 +13,7 @@ export function EmailSettings() {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
-  
+
   const [smtpSettings, setSMTPSettings] = useState<SMTPSettings>({
     smtp_host: '',
     smtp_port: 587,
@@ -143,6 +143,75 @@ export function EmailSettings() {
 
   return (
     <div className="space-y-6">
+      {/* Advanced Authentication Toggle - Only show when SMTP is configured */}
+      {advancedAuthStatus?.smtp_configured && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-bambu-green" />
+                <h2 className="text-lg font-semibold text-white">
+                  {t('settings.email.advancedAuth') || 'Advanced Authentication'}
+                </h2>
+              </div>
+              <Button
+                onClick={handleToggleAdvancedAuth}
+                disabled={toggleAdvancedAuthMutation.isPending}
+                variant={advancedAuthStatus?.advanced_auth_enabled ? 'danger' : 'primary'}
+              >
+                {advancedAuthStatus?.advanced_auth_enabled ? (
+                  <>
+                    <Unlock className="w-4 h-4" />
+                    {t('settings.email.disable') || 'Disable'}
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4" />
+                    {t('settings.email.enable') || 'Enable'}
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {advancedAuthStatus?.advanced_auth_enabled ? (
+                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
+                    <div className="space-y-2">
+                      <p className="text-white font-medium">
+                        {t('settings.email.advancedAuthEnabled') || 'Advanced Authentication is enabled'}
+                      </p>
+                      <ul className="text-sm text-green-300 space-y-1 list-disc list-inside">
+                        <li>{t('settings.email.feature1') || 'Passwords are auto-generated and emailed to new users'}</li>
+                        <li>{t('settings.email.feature2') || 'Users can login with username or email'}</li>
+                        <li>{t('settings.email.feature3') || 'Forgot password feature is available'}</li>
+                        <li>{t('settings.email.feature4') || 'Admins can reset user passwords via email'}</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
+                    <div className="space-y-2">
+                      <p className="text-white font-medium">
+                        {t('settings.email.advancedAuthDisabled') || 'Advanced Authentication is disabled'}
+                      </p>
+                      <p className="text-sm text-yellow-300">
+                        {t('settings.email.advancedAuthDisabledDesc') || 'Enable advanced authentication to activate email-based features for user management.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* SMTP Configuration */}
       <Card>
         <CardHeader>
@@ -328,74 +397,6 @@ export function EmailSettings() {
         </CardContent>
       </Card>
 
-      {/* Advanced Authentication Toggle - Only show when SMTP is configured */}
-      {advancedAuthStatus?.smtp_configured && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Mail className="w-5 h-5 text-bambu-green" />
-                <h2 className="text-lg font-semibold text-white">
-                  {t('settings.email.advancedAuth') || 'Advanced Authentication'}
-                </h2>
-              </div>
-              <Button
-                onClick={handleToggleAdvancedAuth}
-                disabled={toggleAdvancedAuthMutation.isPending}
-                variant={advancedAuthStatus?.advanced_auth_enabled ? 'danger' : 'primary'}
-              >
-                {advancedAuthStatus?.advanced_auth_enabled ? (
-                  <>
-                    <Unlock className="w-4 h-4" />
-                    {t('settings.email.disable') || 'Disable'}
-                  </>
-                ) : (
-                  <>
-                    <Lock className="w-4 h-4" />
-                    {t('settings.email.enable') || 'Enable'}
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {advancedAuthStatus?.advanced_auth_enabled ? (
-                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
-                    <div className="space-y-2">
-                      <p className="text-white font-medium">
-                        {t('settings.email.advancedAuthEnabled') || 'Advanced Authentication is enabled'}
-                      </p>
-                      <ul className="text-sm text-green-300 space-y-1 list-disc list-inside">
-                        <li>{t('settings.email.feature1') || 'Passwords are auto-generated and emailed to new users'}</li>
-                        <li>{t('settings.email.feature2') || 'Users can login with username or email'}</li>
-                        <li>{t('settings.email.feature3') || 'Forgot password feature is available'}</li>
-                        <li>{t('settings.email.feature4') || 'Admins can reset user passwords via email'}</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
-                    <div className="space-y-2">
-                      <p className="text-white font-medium">
-                        {t('settings.email.advancedAuthDisabled') || 'Advanced Authentication is disabled'}
-                      </p>
-                      <p className="text-sm text-yellow-300">
-                        {t('settings.email.advancedAuthDisabledDesc') || 'Enable advanced authentication to activate email-based features for user management.'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { X, Loader2, Settings2, ChevronDown, CheckCircle2, RotateCcw } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import type { KProfile } from '../api/client';
 import { Button } from './Button';
