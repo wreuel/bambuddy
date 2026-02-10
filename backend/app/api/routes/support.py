@@ -463,13 +463,16 @@ async def _collect_support_info() -> dict:
             has_vt_tray = False
             if state:
                 ams_data = state.raw_data.get("ams")
-                if isinstance(ams_data, dict) and "ams" in ams_data:
-                    ams_units = ams_data["ams"]
-                    if isinstance(ams_units, list):
-                        ams_unit_count = len(ams_units)
-                        for unit in ams_units:
-                            trays = unit.get("tray", [])
-                            ams_tray_count += len([t for t in trays if t.get("tray_type")])
+                if isinstance(ams_data, list):
+                    ams_units = ams_data
+                elif isinstance(ams_data, dict) and "ams" in ams_data:
+                    ams_units = ams_data["ams"] if isinstance(ams_data["ams"], list) else []
+                else:
+                    ams_units = []
+                ams_unit_count = len(ams_units)
+                for unit in ams_units:
+                    trays = unit.get("tray", [])
+                    ams_tray_count += len([t for t in trays if t.get("tray_type")])
                 has_vt_tray = state.raw_data.get("vt_tray") is not None
 
             info["printers"].append(
