@@ -54,7 +54,7 @@ export function EmailSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['smtpSettings'] });
       queryClient.invalidateQueries({ queryKey: ['advancedAuthStatus'] });
-      showToast('SMTP settings saved successfully', 'success');
+      showToast(t('settings.email.success.settingsSaved'), 'success');
     },
     onError: (error: Error) => {
       showToast(error.message, 'error');
@@ -88,12 +88,12 @@ export function EmailSettings() {
   const handleSave = () => {
     // Validate required fields
     if (!smtpSettings.smtp_host || !smtpSettings.smtp_from_email) {
-      showToast('Please fill in all required fields', 'error');
+      showToast(t('settings.email.errors.requiredFields'), 'error');
       return;
     }
     // Validate auth fields when authentication is enabled
     if (smtpSettings.smtp_auth_enabled && (!smtpSettings.smtp_username)) {
-      showToast('Username is required when authentication is enabled', 'error');
+      showToast(t('settings.email.errors.usernameRequired'), 'error');
       return;
     }
     saveMutation.mutate(smtpSettings);
@@ -101,16 +101,16 @@ export function EmailSettings() {
 
   const handleTest = () => {
     if (!testEmail) {
-      showToast('Please enter a test email address', 'error');
+      showToast(t('settings.email.errors.enterTestEmail'), 'error');
       return;
     }
     if (!smtpSettings.smtp_host || !smtpSettings.smtp_from_email) {
-      showToast('Please fill in SMTP Server and From Email before testing', 'error');
+      showToast(t('settings.email.errors.smtpServerAndEmail'), 'error');
       return;
     }
     // Validate auth fields when authentication is enabled
     if (smtpSettings.smtp_auth_enabled && (!smtpSettings.smtp_username || !smtpSettings.smtp_password)) {
-      showToast('Username and Password are required when authentication is enabled', 'error');
+      showToast(t('settings.email.errors.usernamePasswordRequired'), 'error');
       return;
     }
     testMutation.mutate({
@@ -127,7 +127,7 @@ export function EmailSettings() {
 
   const handleToggleAdvancedAuth = () => {
     if (!advancedAuthStatus?.advanced_auth_enabled && !advancedAuthStatus?.smtp_configured) {
-      showToast('Please configure and test SMTP settings first', 'error');
+      showToast(t('settings.email.errors.configureSmtpFirst'), 'error');
       return;
     }
     toggleAdvancedAuthMutation.mutate(!advancedAuthStatus?.advanced_auth_enabled);
@@ -189,9 +189,9 @@ export function EmailSettings() {
                   onChange={(e) => setSMTPSettings({ ...smtpSettings, smtp_security: e.target.value as 'starttls' | 'ssl' | 'none' })}
                   className="w-full px-4 py-3 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-bambu-green/50 focus:border-bambu-green transition-colors"
                 >
-                  <option value="starttls">STARTTLS (Port 587)</option>
-                  <option value="ssl">SSL/TLS (Port 465)</option>
-                  <option value="none">None (Port 25)</option>
+                  <option value="starttls">{t('settings.email.securityOptions.starttls')}</option>
+                  <option value="ssl">{t('settings.email.securityOptions.ssl')}</option>
+                  <option value="none">{t('settings.email.securityOptions.none')}</option>
                 </select>
               </div>
               <div>
@@ -203,8 +203,8 @@ export function EmailSettings() {
                   onChange={(e) => setSMTPSettings({ ...smtpSettings, smtp_auth_enabled: e.target.value === 'true' })}
                   className="w-full px-4 py-3 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-bambu-green/50 focus:border-bambu-green transition-colors"
                 >
-                  <option value="true">Enabled</option>
-                  <option value="false">Disabled</option>
+                  <option value="true">{t('settings.email.authOptions.enabled')}</option>
+                  <option value="false">{t('settings.email.authOptions.disabled')}</option>
                 </select>
               </div>
             </div>
