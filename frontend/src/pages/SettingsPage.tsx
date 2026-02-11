@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { formatDateOnly } from '../utils/date';
+import { getCurrencySymbol, SUPPORTED_CURRENCIES } from '../utils/currency';
 import type { AppSettings, AppSettingsUpdate, SmartPlug, SmartPlugStatus, NotificationProvider, NotificationTemplate, UpdateStatus, GitHubBackupStatus, CloudAuthStatus, UserCreate, UserUpdate, UserResponse, Group, GroupCreate, GroupUpdate, Permission, PermissionCategory } from '../api/client';
 import { Card, CardContent, CardHeader } from '../components/Card';
 import { Button } from '../components/Button';
@@ -1558,66 +1559,58 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="block text-sm text-bambu-gray mb-1">
-                  Default filament cost (per kg)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={localSettings.default_filament_cost}
-                  onChange={(e) =>
-                    updateSetting('default_filament_cost', parseFloat(e.target.value) || 0)
-                  }
-                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
-                />
-              </div>
-              <div>
                 <label className="block text-sm text-bambu-gray mb-1">Currency</label>
                 <select
                   value={localSettings.currency}
                   onChange={(e) => updateSetting('currency', e.target.value)}
                   className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
                 >
-                  <option value="USD">USD ($)</option>
-                  <option value="EUR">EUR (€)</option>
-                  <option value="GBP">GBP (£)</option>
-                  <option value="CHF">CHF (Fr.)</option>
-                  <option value="JPY">JPY (¥)</option>
-                  <option value="CNY">CNY (¥)</option>
-                  <option value="CAD">CAD ($)</option>
-                  <option value="AUD">AUD ($)</option>
-                  <option value="HKD">HKD ($)</option>
-                  <option value="INR">INR (₹)</option>
-                  <option value="KRW">KRW (₩)</option>
-                  <option value="SEK">SEK (kr)</option>
-                  <option value="NOK">NOK (kr)</option>
-                  <option value="DKK">DKK (kr)</option>
-                  <option value="PLN">PLN (zł)</option>
-                  <option value="BRL">BRL (R$)</option>
-                  <option value="TWD">TWD ($)</option>
-                  <option value="SGD">SGD ($)</option>
-                  <option value="NZD">NZD ($)</option>
-                  <option value="MXN">MXN ($)</option>
-                  <option value="CZK">CZK (Kč)</option>
-                  <option value="THB">THB (฿)</option>
-                  <option value="ZAR">ZAR (R)</option>
+                  {SUPPORTED_CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.label}</option>
+                  ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm text-bambu-gray mb-1">
+                  Default filament cost (per kg)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-bambu-gray text-sm pointer-events-none">
+                    {getCurrencySymbol(localSettings.currency)}
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={localSettings.default_filament_cost}
+                    onChange={(e) =>
+                      updateSetting('default_filament_cost', parseFloat(e.target.value) || 0)
+                    }
+                    style={{ paddingLeft: `${Math.max(2, getCurrencySymbol(localSettings.currency).length * 0.6 + 1)}rem` }}
+                    className="w-full pr-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm text-bambu-gray mb-1">
                   Electricity cost per kWh
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={localSettings.energy_cost_per_kwh}
-                  onChange={(e) =>
-                    updateSetting('energy_cost_per_kwh', parseFloat(e.target.value) || 0)
-                  }
-                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-bambu-gray text-sm pointer-events-none">
+                    {getCurrencySymbol(localSettings.currency)}
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={localSettings.energy_cost_per_kwh}
+                    onChange={(e) =>
+                      updateSetting('energy_cost_per_kwh', parseFloat(e.target.value) || 0)
+                    }
+                    style={{ paddingLeft: `${Math.max(2, getCurrencySymbol(localSettings.currency).length * 0.6 + 1)}rem` }}
+                    className="w-full pr-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm text-bambu-gray mb-1">
@@ -2547,7 +2540,7 @@ export function SettingsPage() {
                       </div>
                       {(localSettings?.energy_cost_per_kwh ?? 0) > 0 && (
                         <div className="text-xs text-bambu-gray mt-1">
-                          ~{(plugEnergySummary.totalToday * (localSettings?.energy_cost_per_kwh ?? 0)).toFixed(2)} {localSettings?.currency}
+                          ~{(plugEnergySummary.totalToday * (localSettings?.energy_cost_per_kwh ?? 0)).toFixed(2)} {getCurrencySymbol(localSettings?.currency || 'USD')}
                         </div>
                       )}
                     </div>
@@ -2564,7 +2557,7 @@ export function SettingsPage() {
                       </div>
                       {(localSettings?.energy_cost_per_kwh ?? 0) > 0 && (
                         <div className="text-xs text-bambu-gray mt-1">
-                          ~{(plugEnergySummary.totalYesterday * (localSettings?.energy_cost_per_kwh ?? 0)).toFixed(2)} {localSettings?.currency}
+                          ~{(plugEnergySummary.totalYesterday * (localSettings?.energy_cost_per_kwh ?? 0)).toFixed(2)} {getCurrencySymbol(localSettings?.currency || 'USD')}
                         </div>
                       )}
                     </div>
@@ -2581,7 +2574,7 @@ export function SettingsPage() {
                       </div>
                       {(localSettings?.energy_cost_per_kwh ?? 0) > 0 && (
                         <div className="text-xs text-bambu-gray mt-1">
-                          ~{(plugEnergySummary.totalLifetime * (localSettings?.energy_cost_per_kwh ?? 0)).toFixed(2)} {localSettings?.currency}
+                          ~{(plugEnergySummary.totalLifetime * (localSettings?.energy_cost_per_kwh ?? 0)).toFixed(2)} {getCurrencySymbol(localSettings?.currency || 'USD')}
                         </div>
                       )}
                     </div>
