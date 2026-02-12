@@ -1176,6 +1176,9 @@ async def run_migrations(conn):
             )
         """)
         )
+    except OperationalError:
+        pass  # Already applied
+
     # Migration: Add open_in_new_tab column to external_links
     try:
         await conn.execute(text("ALTER TABLE external_links ADD COLUMN open_in_new_tab BOOLEAN DEFAULT 0"))

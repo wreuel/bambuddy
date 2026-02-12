@@ -941,8 +941,9 @@ class BambuMQTTClient:
                                 # Fields that should always be updated (even with empty/zero values):
                                 # - remain, k, id, cali_idx: status indicators where 0 is valid
                                 # - tray_type, tray_sub_brands, tag_uid, tray_uuid, tray_info_idx,
-                                #   tray_color, tray_id_name: slot content indicators that must be
-                                #   cleared when a spool is removed (fixes #147 - old AMS empty slot)
+                                #   tray_color, tray_id_name: slot content indicators that must
+                                #   be cleared when a spool is removed (fixes #147 - old AMS
+                                #   empty slot)
                                 always_update_fields = (
                                     "remain",
                                     "k",
