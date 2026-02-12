@@ -2170,6 +2170,10 @@ export const api = {
     request<{ success: boolean; message: string }>(`/printers/${printerId}/print/resume`, {
       method: 'POST',
     }),
+  clearPlate: (printerId: number) =>
+    request<{ success: boolean; message: string }>(`/printers/${printerId}/clear-plate`, {
+      method: 'POST',
+    }),
 
   // Get current print user (for reprint tracking - Issue #206)
   getCurrentPrintUser: (printerId: number) =>

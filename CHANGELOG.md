@@ -13,6 +13,7 @@ All notable changes to Bambuddy will be documented in this file.
 
 ### New Features
 - **External Links: Open in New Tab** ([#338](https://github.com/maziggy/bambuddy/issues/338)) — External sidebar links can now optionally open in a new browser tab instead of an iframe. Sites behind reverse proxies (Traefik, nginx) that send `X-Frame-Options: SAMEORIGIN` or CSP `frame-ancestors` headers block iframe embedding, causing "refused to connect" errors. A new "Open in new tab" toggle in the add/edit link modal lets users choose per-link. Keyboard shortcuts (number keys) also respect the setting. Defaults to iframe (existing behavior) for backward compatibility.
+- **Print Queue: Clear Plate Confirmation** — When a print finishes or fails and more items are queued, the printer card now shows a "Clear Plate & Start Next" button. The scheduler no longer auto-starts the next print while the printer is in FINISH or FAILED state — the user must confirm the build plate has been cleared first. This prevents prints from starting on a dirty plate. The button respects the `printers:control` permission and is available in all supported languages (en/de/ja).
 
 ### Improved
 - **Additional Currency Options** ([#329](https://github.com/maziggy/bambuddy/issues/329), [#333](https://github.com/maziggy/bambuddy/issues/333)) — Added 17 additional currencies to the cost tracking dropdown: HKD, INR, KRW, SEK, NOK, DKK, PLN, BRL, TWD, SGD, NZD, MXN, CZK, THB, ZAR, RUB.

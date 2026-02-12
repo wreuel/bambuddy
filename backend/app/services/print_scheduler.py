@@ -694,9 +694,11 @@ class PrintScheduler:
         if not state:
             return False
 
-        # Printer is idle if state is IDLE, FINISH, FAILED, or unknown
-        # FAILED means previous print failed, printer is ready for new print
-        return state.state in ("IDLE", "FINISH", "FAILED", "unknown")
+        # IDLE = ready for next print
+        # FINISH/FAILED = ready only if user confirmed plate is cleared
+        return state.state == "IDLE" or (
+            state.state in ("FINISH", "FAILED") and printer_manager.is_plate_cleared(printer_id)
+        )
 
     async def _get_smart_plug(self, db: AsyncSession, printer_id: int) -> SmartPlug | None:
         """Get the smart plug associated with a printer."""
@@ -1034,6 +1036,9 @@ class PrintScheduler:
         item.status = "printing"
         item.started_at = datetime.utcnow()
         await db.commit()
+
+        # Consume the plate-cleared flag now that we're starting a print
+        printer_manager.consume_plate_cleared(item.printer_id)
         logger.info("Queue item %s: Status set to 'printing', sending print command...", item.id)
 
         # Start the print with AMS mapping, plate_id and print options

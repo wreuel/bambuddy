@@ -697,6 +697,10 @@ export default {
     dragToReorder: 'Ziehen zum Neuordnen (nur Sofort)',
     reorderHint: 'Position betrifft nur Sofort-Elemente. Geplante Elemente werden zur festgelegten Zeit ausgeführt.',
     addedBy: 'Hinzugefügt von {{name}}',
+    nextInQueue: 'Nächster in der Warteschlange',
+    clearPlate: 'Druckplatte freigeben & Nächsten starten',
+    clearPlateSuccess: 'Druckplatte freigegeben — bereit für nächsten Druck',
+    plateReady: 'Druckplatte freigegeben — bereit für nächsten Druck',
     // Sections
     sections: {
       currentlyPrinting: 'Aktuell druckend',

@@ -100,6 +100,8 @@ class PrinterManager:
         self._loop: asyncio.AbstractEventLoop | None = None
         # Track who started the current print (Issue #206)
         self._current_print_user: dict[int, dict] = {}  # {printer_id: {"user_id": int, "username": str}}
+        # Track plate-cleared acknowledgments for queue flow
+        self._plate_cleared: set[int] = set()  # printer_ids where user confirmed plate is cleared
 
     def get_printer(self, printer_id: int) -> PrinterInfo | None:
         """Get printer info by ID."""
@@ -116,6 +118,18 @@ class PrinterManager:
     def clear_current_print_user(self, printer_id: int):
         """Clear the current print user when print completes (Issue #206)."""
         self._current_print_user.pop(printer_id, None)
+
+    def set_plate_cleared(self, printer_id: int):
+        """Mark that user has cleared the build plate for this printer."""
+        self._plate_cleared.add(printer_id)
+
+    def is_plate_cleared(self, printer_id: int) -> bool:
+        """Check if user has confirmed the plate is cleared."""
+        return printer_id in self._plate_cleared
+
+    def consume_plate_cleared(self, printer_id: int):
+        """Clear the plate-cleared flag (called when scheduler starts next print)."""
+        self._plate_cleared.discard(printer_id)
 
     def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         """Set the event loop for async callbacks."""

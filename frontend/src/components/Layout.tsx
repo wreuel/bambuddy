@@ -375,7 +375,7 @@ export function Layout() {
           break;
       }
     }
-  }, [navigate, orderedSidebarIds, navItemsMap]);
+  }, [navigate, orderedSidebarIds, navItemsMap, extLinksMap]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);

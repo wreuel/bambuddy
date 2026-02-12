@@ -2399,10 +2399,8 @@ function PrinterCard({
                   </div>
                 </div>
 
-                {/* Queue Widget - shows next scheduled print */}
-                {status.state !== 'RUNNING' && (
-                  <PrinterQueueWidget printerId={printer.id} />
-                )}
+                {/* Queue Widget - always visible when there are pending items */}
+                <PrinterQueueWidget printerId={printer.id} printerState={status.state} />
               </>
             )}
 
