@@ -770,6 +770,10 @@ export default {
     itemCount: '{{count}}件',
     dragToReorder: 'ドラッグして並べ替え（ASAPのみ）',
     addedBy: '{{username}}が追加',
+    nextInQueue: '次のキュー',
+    clearPlate: 'プレートをクリアして次を開始',
+    clearPlateSuccess: 'プレートをクリアしました — 次の印刷の準備完了',
+    plateReady: 'プレートをクリアしました — 次の印刷の準備完了',
     sections: {
       currentlyPrinting: '印刷中',
       queued: 'キュー中',
@@ -2946,6 +2950,7 @@ export default {
     noLinksConfigured: '外部リンクが設定されていません',
     deleteLink: 'リンクを削除',
     removeCustomIcon: 'カスタムアイコンを削除',
+    openInNewTab: '新しいタブで開く',
     placeholders: {
       linkName: 'マイリンク',
     },

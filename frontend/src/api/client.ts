@@ -18,6 +18,18 @@ export function getAuthToken(): string | null {
   return authToken;
 }
 
+function parseContentDispositionFilename(header: string | null): string | null {
+  if (!header) return null;
+  // RFC 5987: filename*=utf-8''percent-encoded-name
+  const rfc5987Match = header.match(/filename\*=(?:UTF-8|utf-8)''(.+?)(?:;|$)/);
+  if (rfc5987Match) {
+    try { return decodeURIComponent(rfc5987Match[1]); } catch { /* fall through */ }
+  }
+  // Standard: filename="name" or filename=name
+  const standardMatch = header.match(/filename="?([^";\n]+)"?/);
+  return standardMatch?.[1] || null;
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -1900,6 +1912,7 @@ export interface ExternalLink {
   name: string;
   url: string;
   icon: string;
+  open_in_new_tab: boolean;
   custom_icon: string | null;
   sort_order: number;
   created_at: string;
@@ -1910,12 +1923,14 @@ export interface ExternalLinkCreate {
   name: string;
   url: string;
   icon: string;
+  open_in_new_tab?: boolean;
 }
 
 export interface ExternalLinkUpdate {
   name?: string;
   url?: string;
   icon?: string;
+  open_in_new_tab?: boolean;
 }
 
 // Permission type - all available permissions
@@ -2263,6 +2278,10 @@ export const api = {
     request<{ success: boolean; message: string }>(`/printers/${printerId}/print/resume`, {
       method: 'POST',
     }),
+  clearPlate: (printerId: number) =>
+    request<{ success: boolean; message: string }>(`/printers/${printerId}/clear-plate`, {
+      method: 'POST',
+    }),
 
   // Get current print user (for reprint tracking - Issue #206)
   getCurrentPrintUser: (printerId: number) =>
@@ -2371,8 +2390,7 @@ export const api = {
       throw new Error(error.detail || `HTTP ${response.status}`);
     }
     const disposition = response.headers.get('Content-Disposition');
-    const filenameMatch = disposition?.match(/filename="?([^";\n]+)"?/);
-    const filename = filenameMatch?.[1] || path.split('/').pop() || 'download';
+    const filename = parseContentDispositionFilename(disposition) || path.split('/').pop() || 'download';
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2572,8 +2590,7 @@ export const api = {
       throw new Error(error.detail || `HTTP ${response.status}`);
     }
     const disposition = response.headers.get('Content-Disposition');
-    const filenameMatch = disposition?.match(/filename="?([^";\n]+)"?/);
-    const downloadFilename = filenameMatch?.[1] || filename || `archive_${id}.3mf`;
+    const downloadFilename = parseContentDispositionFilename(disposition) || filename || `archive_${id}.3mf`;
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2713,8 +2730,7 @@ export const api = {
       throw new Error(error.detail || `HTTP ${response.status}`);
     }
     const disposition = response.headers.get('Content-Disposition');
-    const filenameMatch = disposition?.match(/filename="?([^";\n]+)"?/);
-    const filename = filenameMatch?.[1] || `source_${archiveId}.3mf`;
+    const filename = parseContentDispositionFilename(disposition) || `source_${archiveId}.3mf`;
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2763,8 +2779,7 @@ export const api = {
       throw new Error(error.detail || `HTTP ${response.status}`);
     }
     const disposition = response.headers.get('Content-Disposition');
-    const filenameMatch = disposition?.match(/filename="?([^";\n]+)"?/);
-    const filename = filenameMatch?.[1] || `archive_${archiveId}.f3d`;
+    const filename = parseContentDispositionFilename(disposition) || `archive_${archiveId}.f3d`;
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -3721,8 +3736,7 @@ export const api = {
       throw new Error(error.detail || `HTTP ${response.status}`);
     }
     const contentDisposition = response.headers.get('Content-Disposition');
-    const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
-    const filename = filenameMatch?.[1] || `project_${projectId}.zip`;
+    const filename = parseContentDispositionFilename(contentDisposition) || `project_${projectId}.zip`;
     const blob = await response.blob();
     return { blob, filename };
   },
@@ -3850,8 +3864,7 @@ export const api = {
       throw new Error(error.detail || `HTTP ${response.status}`);
     }
     const disposition = response.headers.get('Content-Disposition');
-    const filenameMatch = disposition?.match(/filename="?([^";\n]+)"?/);
-    const downloadFilename = filenameMatch?.[1] || filename || `file_${id}`;
+    const downloadFilename = parseContentDispositionFilename(disposition) || filename || `file_${id}`;
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -4530,8 +4543,7 @@ export const supportApi = {
     }
     // Get filename from Content-Disposition header or use default
     const disposition = response.headers.get('Content-Disposition');
-    const filenameMatch = disposition?.match(/filename=(.+)/);
-    const filename = filenameMatch ? filenameMatch[1] : 'bambuddy-support.zip';
+    const filename = parseContentDispositionFilename(disposition) || 'bambuddy-support.zip';
 
     // Download the blob
     const blob = await response.blob();
