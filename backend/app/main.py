@@ -541,30 +541,65 @@ async def on_ams_change(printer_id: int, ams_data: list):
             for assignment in result.scalars().all():
                 current_tray = _find_tray_in_ams_data(ams_data, assignment.ams_id, assignment.tray_id)
                 if not current_tray:
+                    logger.info(
+                        "Auto-unlink: spool %d AMS%d-T%d — tray not found in AMS data (slot empty?)",
+                        assignment.spool_id,
+                        assignment.ams_id,
+                        assignment.tray_id,
+                    )
                     stale.append(assignment)  # Slot empty
+                elif _is_bambu_uuid(current_tray.get("tray_uuid", "")):
+                    # A Bambu Lab spool was inserted — always unlink manual assignments
+                    logger.info(
+                        "Auto-unlink: spool %d AMS%d-T%d — Bambu Lab spool detected (uuid=%s)",
+                        assignment.spool_id,
+                        assignment.ams_id,
+                        assignment.tray_id,
+                        current_tray.get("tray_uuid", ""),
+                    )
+                    stale.append(assignment)
                 else:
                     cur_color = current_tray.get("tray_color", "")
                     cur_type = current_tray.get("tray_type", "")
                     fp_color = assignment.fingerprint_color or ""
                     fp_type = assignment.fingerprint_type or ""
-                    if cur_color != fp_color or cur_type != fp_type:
-                        stale.append(assignment)  # Spool changed
-                    elif _is_bambu_uuid(current_tray.get("tray_uuid", "")):
-                        # Only unlink if the assigned spool doesn't match this tag
-                        tray_uuid = current_tray.get("tray_uuid", "")
-                        tag_uid = current_tray.get("tag_uid", "")
+                    if cur_color.upper() != fp_color.upper() or cur_type.upper() != fp_type.upper():
+                        # Fingerprint mismatch — but check if tray now matches the
+                        # assigned spool (e.g. auto-configure changed the tray).
                         spool = assignment.spool
-                        if spool and (
-                            (spool.tray_uuid and spool.tray_uuid == tray_uuid)
-                            or (spool.tag_uid and spool.tag_uid == tag_uid)
-                        ):
-                            continue  # Same spool — keep assignment
-                        stale.append(assignment)  # Different Bambu spool inserted
+                        if spool:
+                            spool_color = (spool.rgba or "FFFFFFFF").upper()
+                            spool_type = (spool.material or "").upper()
+                            if cur_color.upper() == spool_color and cur_type.upper() == spool_type:
+                                # Tray was reconfigured to match the spool — update fingerprint
+                                logger.info(
+                                    "Auto-unlink: spool %d AMS%d-T%d — fingerprint mismatch but tray matches spool, updating fp",
+                                    assignment.spool_id,
+                                    assignment.ams_id,
+                                    assignment.tray_id,
+                                )
+                                assignment.fingerprint_color = cur_color
+                                assignment.fingerprint_type = cur_type
+                                continue
+                        logger.info(
+                            "Auto-unlink: spool %d AMS%d-T%d — fingerprint mismatch (cur=%s/%s fp=%s/%s spool=%s/%s)",
+                            assignment.spool_id,
+                            assignment.ams_id,
+                            assignment.tray_id,
+                            cur_color,
+                            cur_type,
+                            fp_color,
+                            fp_type,
+                            spool.rgba if spool else "?",
+                            spool.material if spool else "?",
+                        )
+                        stale.append(assignment)  # Spool changed
             for a in stale:
                 await db.delete(a)
             if stale:
-                await db.commit()
                 logger.info("Auto-unlinked %d stale spool assignments for printer %d", len(stale), printer_id)
+            # Commit any changes (stale deletions and/or fingerprint updates)
+            await db.commit()
     except Exception as e:
         logger.warning("Spool assignment cleanup failed: %s", e)
 
@@ -2051,7 +2086,9 @@ async def on_print_complete(printer_id: int, data: dict):
             from backend.app.services.usage_tracker import on_print_complete as usage_on_print_complete
 
             async with async_session() as db:
-                usage_results = await usage_on_print_complete(printer_id, data, printer_manager, db)
+                usage_results = await usage_on_print_complete(
+                    printer_id, data, printer_manager, db, archive_id=archive_id
+                )
                 if usage_results:
                     await ws_manager.broadcast(
                         {

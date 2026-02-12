@@ -442,9 +442,9 @@ export function ColorCatalogSettings() {
                 <tr>
                   <th className="px-3 py-2 text-left text-bambu-gray font-medium w-12"></th>
                   <th className="px-3 py-2 text-left text-bambu-gray font-medium">{t('settings.colorCatalog.manufacturer')}</th>
+                  <th className="px-3 py-2 text-left text-bambu-gray font-medium">{t('inventory.material')}</th>
                   <th className="px-3 py-2 text-left text-bambu-gray font-medium">{t('settings.colorCatalog.colorName')}</th>
                   <th className="px-3 py-2 text-left text-bambu-gray font-medium w-24">{t('settings.colorCatalog.hex')}</th>
-                  <th className="px-3 py-2 text-left text-bambu-gray font-medium">{t('inventory.material')}</th>
                   <th className="px-3 py-2 w-16"></th>
                 </tr>
               </thead>
@@ -480,6 +480,14 @@ export function ColorCatalogSettings() {
                             <input
                               type="text"
                               className="w-full px-2 py-1 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded text-white text-sm focus:border-bambu-green focus:outline-none"
+                              value={formMaterial}
+                              onChange={(e) => setFormMaterial(e.target.value)}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              className="w-full px-2 py-1 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded text-white text-sm focus:border-bambu-green focus:outline-none"
                               value={formColorName}
                               onChange={(e) => setFormColorName(e.target.value)}
                             />
@@ -490,14 +498,6 @@ export function ColorCatalogSettings() {
                               className="w-full px-2 py-1 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded text-white text-sm focus:border-bambu-green focus:outline-none"
                               value={formHexColor}
                               onChange={(e) => setFormHexColor(e.target.value)}
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="text"
-                              className="w-full px-2 py-1 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded text-white text-sm focus:border-bambu-green focus:outline-none"
-                              value={formMaterial}
-                              onChange={(e) => setFormMaterial(e.target.value)}
                             />
                           </td>
                           <td className="px-3 py-2">
@@ -525,9 +525,9 @@ export function ColorCatalogSettings() {
                             />
                           </td>
                           <td className="px-3 py-2 text-white">{entry.manufacturer}</td>
+                          <td className="px-3 py-2 text-bambu-gray">{entry.material || '-'}</td>
                           <td className="px-3 py-2 text-white">{entry.color_name}</td>
                           <td className="px-3 py-2 font-mono text-xs text-bambu-gray">{entry.hex_color}</td>
-                          <td className="px-3 py-2 text-bambu-gray">{entry.material || '-'}</td>
                           <td className="px-3 py-2">
                             <div className="flex justify-end gap-1">
                               <button

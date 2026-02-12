@@ -329,8 +329,8 @@ export function FilamentHoverCard({ data, children, disabled, className = '', sp
                 </div>
               )}
 
-              {/* Inventory section - assign/unassign for non-Bambu spools */}
-              {inventory && (data.vendor !== 'Bambu Lab' || !data.trayUuid) && (
+              {/* Inventory section - only for non-Bambu spools */}
+              {inventory && data.vendor !== 'Bambu Lab' && (
                 <div className="pt-2 mt-2 border-t border-bambu-dark-tertiary space-y-2">
                   {inventory.assignedSpool ? (
                     <>

@@ -1,4 +1,4 @@
-import type { SlicerSetting } from '../../api/client';
+import type { SlicerSetting, LocalPreset } from '../../api/client';
 import type { ColorPreset, FilamentOption } from './types';
 import { KNOWN_VARIANTS, DEFAULT_BRANDS, RECENT_COLORS_KEY, MAX_RECENT_COLORS } from './constants';
 
@@ -91,8 +91,8 @@ export function parsePresetName(name: string): { brand: string; material: string
   return { brand, material, variant };
 }
 
-// Extract unique brands from cloud presets
-export function extractBrandsFromPresets(presets: SlicerSetting[]): string[] {
+// Extract unique brands from cloud presets and local presets
+export function extractBrandsFromPresets(presets: SlicerSetting[], localPresets?: LocalPreset[]): string[] {
   const brandSet = new Set<string>(DEFAULT_BRANDS);
 
   for (const preset of presets) {
@@ -102,14 +102,56 @@ export function extractBrandsFromPresets(presets: SlicerSetting[]): string[] {
     }
   }
 
+  // Also extract brands from local presets
+  if (localPresets) {
+    for (const preset of localPresets) {
+      if (preset.filament_vendor && preset.filament_vendor.length > 1) {
+        brandSet.add(preset.filament_vendor);
+      } else {
+        const { brand } = parsePresetName(preset.name);
+        if (brand && brand.length > 1) {
+          brandSet.add(brand);
+        }
+      }
+    }
+  }
+
   return Array.from(brandSet).sort((a, b) => a.localeCompare(b));
 }
 
-// Build filament options from cloud presets
+// Build filament options from local presets (OrcaSlicer imports)
+function buildLocalFilamentOptions(localPresets: LocalPreset[]): FilamentOption[] {
+  const filamentPresets = localPresets.filter(p => p.preset_type === 'filament');
+  if (filamentPresets.length === 0) return [];
+
+  const presetsMap = new Map<string, FilamentOption>();
+  for (const preset of filamentPresets) {
+    const baseName = preset.name.replace(/@.*$/, '').trim();
+    const existing = presetsMap.get(baseName);
+    if (existing) {
+      existing.allCodes.push(String(preset.id));
+    } else {
+      // Use filament_type as the code if available (e.g. "GFL00"), otherwise use the id
+      const code = preset.filament_type || String(preset.id);
+      presetsMap.set(baseName, {
+        code,
+        name: baseName,
+        displayName: baseName,
+        isCustom: false,
+        allCodes: [code],
+      });
+    }
+  }
+  return Array.from(presetsMap.values()).sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
+// Build filament options: cloud presets → local presets → hardcoded fallback
 export function buildFilamentOptions(
   cloudPresets: SlicerSetting[],
   configuredPrinterModels: Set<string>,
+  localPresets?: LocalPreset[],
 ): FilamentOption[] {
+  // 1. Cloud presets (highest priority)
   if (cloudPresets.length > 0) {
     const customPresets: FilamentOption[] = [];
     const defaultPresetsMap = new Map<string, FilamentOption>();
@@ -155,7 +197,13 @@ export function buildFilamentOptions(
     ].sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
-  // Fallback to hardcoded defaults
+  // 2. Local presets (OrcaSlicer imports)
+  if (localPresets && localPresets.length > 0) {
+    const localOptions = buildLocalFilamentOptions(localPresets);
+    if (localOptions.length > 0) return localOptions;
+  }
+
+  // 3. Hardcoded fallback
   return FALLBACK_PRESETS;
 }
 

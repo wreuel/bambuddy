@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { X, Loader2, Save, Beaker, Palette } from 'lucide-react';
 import { api } from '../api/client';
-import type { InventorySpool, SlicerSetting, SpoolCatalogEntry } from '../api/client';
+import type { InventorySpool, SlicerSetting, SpoolCatalogEntry, LocalPreset } from '../api/client';
 import { Button } from './Button';
 import { useToast } from '../contexts/ToastContext';
 import type { SpoolFormData, PrinterWithCalibrations, ColorPreset } from './spool-form/types';
@@ -44,6 +44,12 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
 
   // Spool catalog
   const [spoolCatalog, setSpoolCatalog] = useState<SpoolCatalogEntry[]>([]);
+
+  // Local presets (OrcaSlicer imports)
+  const [localPresets, setLocalPresets] = useState<LocalPreset[]>([]);
+
+  // Color catalog
+  const [colorCatalog, setColorCatalog] = useState<{ manufacturer: string; color_name: string; hex_color: string; material: string | null }[]>([]);
 
   // Color state
   const [recentColors, setRecentColors] = useState<ColorPreset[]>([]);
@@ -89,6 +95,8 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
       };
       fetchData();
       api.getSpoolCatalog().then(setSpoolCatalog).catch(console.error);
+      api.getColorCatalog().then(setColorCatalog).catch(console.error);
+      api.getLocalPresets().then(r => setLocalPresets(r.filament)).catch(console.error);
 
       // Fetch printer calibrations if not provided via props
       if (printersWithCalibrations.length === 0) {
@@ -130,18 +138,18 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
         })();
       }
     }
-  }, [isOpen]);
+  }, [isOpen, printersWithCalibrations.length]);
 
-  // Build filament options from cloud presets
+  // Build filament options: cloud → local → fallback
   const filamentOptions = useMemo(
-    () => buildFilamentOptions(cloudPresets, new Set()),
-    [cloudPresets],
+    () => buildFilamentOptions(cloudPresets, new Set(), localPresets),
+    [cloudPresets, localPresets],
   );
 
   // Extract brands from presets
   const availableBrands = useMemo(
-    () => extractBrandsFromPresets(cloudPresets),
-    [cloudPresets],
+    () => extractBrandsFromPresets(cloudPresets, localPresets),
+    [cloudPresets, localPresets],
   );
 
   // Find selected preset option
@@ -162,6 +170,7 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
           rgba: spool.rgba || '808080FF',
           label_weight: spool.label_weight || 1000,
           core_weight: spool.core_weight || 250,
+          weight_used: spool.weight_used || 0,
           slicer_filament: spool.slicer_filament || '',
           note: spool.note || '',
         });
@@ -214,11 +223,11 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
     mutationFn: (data: Record<string, unknown>) =>
       api.createSpool(data as Parameters<typeof api.createSpool>[0]),
     onSuccess: async (newSpool) => {
-      queryClient.invalidateQueries({ queryKey: ['inventory-spools'] });
       // Save K-profiles if any selected
       if (selectedProfiles.size > 0 && newSpool?.id) {
         await saveKProfiles(newSpool.id);
       }
+      await queryClient.invalidateQueries({ queryKey: ['inventory-spools'] });
       showToast(t('inventory.spoolCreated'), 'success');
       onClose();
     },
@@ -231,11 +240,11 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
     mutationFn: (data: Record<string, unknown>) =>
       api.updateSpool(spool!.id, data as Parameters<typeof api.updateSpool>[1]),
     onSuccess: async () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory-spools'] });
       // Save K-profiles
       if (spool?.id) {
         await saveKProfiles(spool.id);
       }
+      await queryClient.invalidateQueries({ queryKey: ['inventory-spools'] });
       showToast(t('inventory.spoolUpdated'), 'success');
       onClose();
     },
@@ -290,6 +299,16 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
     }
   };
 
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleSubmit = () => {
@@ -314,7 +333,7 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
       rgba: formData.rgba || null,
       label_weight: formData.label_weight,
       core_weight: formData.core_weight,
-      weight_used: spool?.weight_used ?? 0,
+      weight_used: formData.weight_used,
       slicer_filament: formData.slicer_filament || null,
       slicer_filament_name: presetName,
       nozzle_temp_min: null,
@@ -421,6 +440,7 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
                   updateField={updateField}
                   recentColors={recentColors}
                   onColorUsed={handleColorUsed}
+                  catalogColors={colorCatalog}
                 />
               </div>
 

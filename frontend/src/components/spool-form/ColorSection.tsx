@@ -9,6 +9,7 @@ export function ColorSection({
   updateField,
   recentColors,
   onColorUsed,
+  catalogColors,
 }: ColorSectionProps) {
   const { t } = useTranslation();
   const [showAllColors, setShowAllColors] = useState(false);
@@ -28,8 +29,87 @@ export function ColorSection({
     onColorUsed({ name, hex });
   };
 
-  // Colors to show based on search/expand state
-  const filteredColors = useMemo(() => {
+  // Filter catalog colors by the selected brand + material + subtype
+  // Brand matching is word-based: "mz - Bambu" matches "Bambu Lab" because both contain "Bambu"
+  // Material matching: try exact "PETG Basic" first, fall back to base material "PETG" prefix
+  const matchedCatalogColors = useMemo(() => {
+    if (catalogColors.length === 0) return [];
+    const brand = formData.brand?.trim();
+    const material = formData.material?.toLowerCase().trim();
+    const subtype = formData.subtype?.toLowerCase().trim();
+    if (!brand && !material) return [];
+
+    // Split brand into words (>= 2 chars) for word-based matching
+    const brandWords = brand
+      ? brand.toLowerCase().split(/[\s\-_]+/).filter(w => w.length >= 2)
+      : [];
+
+    const brandMatches = (manufacturer: string) => {
+      if (brandWords.length === 0) return true; // no brand filter
+      const mfrLower = manufacturer.toLowerCase();
+      // Any significant brand word found in manufacturer name
+      return brandWords.some(w => mfrLower.includes(w));
+    };
+
+    // Build the combined material+subtype string to match catalog entries
+    const fullMaterial = material && subtype ? `${material} ${subtype}` : '';
+
+    // First pass: try exact fullMaterial match (e.g. "PETG Basic")
+    if (fullMaterial) {
+      const exact = catalogColors.filter(c =>
+        brandMatches(c.manufacturer) &&
+        c.material?.toLowerCase() === fullMaterial,
+      );
+      if (exact.length > 0) {
+        return exact.map(c => ({
+          name: c.color_name,
+          hex: c.hex_color.replace('#', '').substring(0, 6),
+        }));
+      }
+      // Try without trailing "+" (e.g. "PLA Silk+" -> "PLA Silk")
+      const normalized = fullMaterial.replace(/\+$/, '');
+      if (normalized !== fullMaterial) {
+        const normMatch = catalogColors.filter(c =>
+          brandMatches(c.manufacturer) &&
+          c.material?.toLowerCase() === normalized,
+        );
+        if (normMatch.length > 0) {
+          return normMatch.map(c => ({
+            name: c.color_name,
+            hex: c.hex_color.replace('#', '').substring(0, 6),
+          }));
+        }
+      }
+    }
+
+    // Second pass: match base material prefix (e.g. "PETG" matches "PETG Basic", "PETG-HF")
+    if (material) {
+      const byMaterial = catalogColors.filter(c =>
+        brandMatches(c.manufacturer) &&
+        (!c.material || c.material.toLowerCase().startsWith(material)),
+      );
+      if (byMaterial.length > 0) {
+        return byMaterial.map(c => ({
+          name: c.color_name,
+          hex: c.hex_color.replace('#', '').substring(0, 6),
+        }));
+      }
+    }
+
+    return [];
+  }, [catalogColors, formData.brand, formData.material, formData.subtype]);
+
+  const hasCatalogMatch = matchedCatalogColors.length > 0;
+
+  // Search within matched catalog colors
+  const filteredCatalogColors = useMemo(() => {
+    if (!colorSearch) return matchedCatalogColors;
+    const q = colorSearch.toLowerCase();
+    return matchedCatalogColors.filter(c => c.name.toLowerCase().includes(q));
+  }, [matchedCatalogColors, colorSearch]);
+
+  // Fallback hardcoded colors for search/expand
+  const filteredFallbackColors = useMemo(() => {
     if (colorSearch) {
       return ALL_COLORS.filter(c =>
         c.name.toLowerCase().includes(colorSearch.toLowerCase()),
@@ -84,48 +164,81 @@ export function ColorSection({
         />
       </div>
 
-      {/* Color Swatches Grid */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-xs text-bambu-gray">
-          <span>{colorSearch ? t('inventory.searchResults') : (showAllColors ? t('inventory.allColors') : t('inventory.commonColors'))}</span>
-          {!colorSearch && (
-            <button
-              type="button"
-              onClick={() => setShowAllColors(!showAllColors)}
-              className="flex items-center gap-1 hover:text-white transition-colors"
-            >
-              {showAllColors ? (
-                <>{t('inventory.showLess')} <ChevronUp className="w-3 h-3" /></>
-              ) : (
-                <>{t('inventory.showAll')} <ChevronDown className="w-3 h-3" /></>
-              )}
-            </button>
-          )}
+      {/* Color Swatches */}
+      {hasCatalogMatch ? (
+        /* Catalog colors matching selected brand/material */
+        <div className="space-y-1.5">
+          <span className="text-xs text-bambu-gray">
+            {colorSearch ? t('inventory.searchResults') : `${formData.brand}${formData.material ? ` ${formData.material}` : ''}`}
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {filteredCatalogColors.map(color => (
+              <button
+                key={`${color.hex}-${color.name}`}
+                type="button"
+                onClick={() => selectColor(color.hex, color.name)}
+                className={`w-6 h-6 rounded border-2 transition-all hover:scale-110 relative group ${
+                  isSelected(color.hex)
+                    ? 'border-bambu-green ring-1 ring-bambu-green/30 scale-110'
+                    : 'border-bambu-dark-tertiary'
+                }`}
+                style={{ backgroundColor: `#${color.hex}` }}
+                title={color.name}
+              >
+                <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-lg text-white">
+                  {color.name}
+                </span>
+              </button>
+            ))}
+            {filteredCatalogColors.length === 0 && (
+              <p className="text-sm text-bambu-gray py-1">{t('inventory.noColorsFound')}</p>
+            )}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {filteredColors.map(color => (
-            <button
-              key={color.hex}
-              type="button"
-              onClick={() => selectColor(color.hex, color.name)}
-              className={`w-6 h-6 rounded border-2 transition-all hover:scale-110 relative group ${
-                isSelected(color.hex)
-                  ? 'border-bambu-green ring-1 ring-bambu-green/30 scale-110'
-                  : 'border-bambu-dark-tertiary'
-              }`}
-              style={{ backgroundColor: `#${color.hex}` }}
-              title={color.name}
-            >
-              <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-lg text-white">
-                {color.name}
-              </span>
-            </button>
-          ))}
-          {filteredColors.length === 0 && (
-            <p className="text-sm text-bambu-gray py-1">{t('inventory.noColorsFound')}</p>
-          )}
+      ) : (
+        /* Fallback: hardcoded color palette (no brand/material selected or no catalog matches) */
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-bambu-gray">
+            <span>{colorSearch ? t('inventory.searchResults') : (showAllColors ? t('inventory.allColors') : t('inventory.commonColors'))}</span>
+            {!colorSearch && (
+              <button
+                type="button"
+                onClick={() => setShowAllColors(!showAllColors)}
+                className="flex items-center gap-1 hover:text-white transition-colors"
+              >
+                {showAllColors ? (
+                  <>{t('inventory.showLess')} <ChevronUp className="w-3 h-3" /></>
+                ) : (
+                  <>{t('inventory.showAll')} <ChevronDown className="w-3 h-3" /></>
+                )}
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {filteredFallbackColors.map(color => (
+              <button
+                key={color.hex}
+                type="button"
+                onClick={() => selectColor(color.hex, color.name)}
+                className={`w-6 h-6 rounded border-2 transition-all hover:scale-110 relative group ${
+                  isSelected(color.hex)
+                    ? 'border-bambu-green ring-1 ring-bambu-green/30 scale-110'
+                    : 'border-bambu-dark-tertiary'
+                }`}
+                style={{ backgroundColor: `#${color.hex}` }}
+                title={color.name}
+              >
+                <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-lg text-white">
+                  {color.name}
+                </span>
+              </button>
+            ))}
+            {filteredFallbackColors.length === 0 && (
+              <p className="text-sm text-bambu-gray py-1">{t('inventory.noColorsFound')}</p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Manual Color Input */}
       <div className="grid grid-cols-2 gap-3">

@@ -5,6 +5,7 @@ import {
   Plus, Loader2, Trash2, Archive, RotateCcw, Edit2, Package,
   Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   TrendingDown, Layers, Printer, AlertTriangle, X, Clock, LayoutGrid, TableProperties, Columns,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import { api } from '../api/client';
 import type { InventorySpool, SpoolAssignment } from '../api/client';
@@ -17,6 +18,8 @@ import { resolveSpoolColorName } from '../utils/colors';
 type ArchiveFilter = 'active' | 'archived';
 type UsageFilter = 'all' | 'used' | 'new';
 type ViewMode = 'table' | 'cards';
+type SortDirection = 'asc' | 'desc';
+type SortState = { column: string; direction: SortDirection } | null;
 
 // Column definitions for the inventory table
 const COLUMN_CONFIG_KEY = 'bambuddy-inventory-columns';
@@ -249,6 +252,52 @@ const columnCells: Record<string, (ctx: CellCtx) => ReactNode> = {
   ),
 };
 
+// Sort value extractors — return a comparable value for each sortable column
+const columnSortValues: Record<string, (spool: InventorySpool, assignmentMap: Record<number, SpoolAssignment>) => string | number> = {
+  id: (s) => s.id,
+  added_time: (s) => s.created_at || '',
+  encode_time: (s) => s.encode_time || '',
+  last_used_time: (s) => s.last_used || '',
+  material: (s) => (s.material || '').toLowerCase(),
+  subtype: (s) => (s.subtype || '').toLowerCase(),
+  color_name: (s) => (s.color_name || '').toLowerCase(),
+  brand: (s) => (s.brand || '').toLowerCase(),
+  slicer_filament: (s) => (s.slicer_filament_name || s.slicer_filament || '').toLowerCase(),
+  location: (s, am) => {
+    const a = am[s.id];
+    if (!a) return '';
+    return `${a.printer_name || ''} ${String.fromCharCode(65 + a.ams_id)}${a.tray_id + 1}`;
+  },
+  label_weight: (s) => s.label_weight,
+  net: (s) => Math.max(0, s.label_weight - s.weight_used),
+  gross: (s) => Math.max(0, s.label_weight - s.weight_used) + s.core_weight,
+  used: (s) => s.weight_used,
+  remaining: (s) => s.label_weight > 0 ? Math.max(0, s.label_weight - s.weight_used) / s.label_weight : 0,
+  note: (s) => (s.note || '').toLowerCase(),
+  data_origin: (s) => (s.data_origin || '').toLowerCase(),
+  tag_type: (s) => (s.tag_type || '').toLowerCase(),
+};
+
+const SORT_STATE_KEY = 'bambuddy-inventory-sort';
+
+function loadSortState(): SortState {
+  try {
+    const stored = localStorage.getItem(SORT_STATE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch { /* ignore */ }
+  return null;
+}
+
+function saveSortState(state: SortState) {
+  try {
+    if (state) {
+      localStorage.setItem(SORT_STATE_KEY, JSON.stringify(state));
+    } else {
+      localStorage.removeItem(SORT_STATE_KEY);
+    }
+  } catch { /* ignore */ }
+}
+
 export default function InventoryPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -262,21 +311,33 @@ export default function InventoryPage() {
   const [brandFilter, setBrandFilter] = useState('');
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [sortState, setSortState] = useState<SortState>(loadSortState);
   const [columnConfig, setColumnConfig] = useState<ColumnConfig[]>(loadColumnConfig);
   const [showColumnModal, setShowColumnModal] = useState(false);
 
-  // Pagination state
+  // Pagination state (pageSize persisted to localStorage)
   const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(() => {
+    try {
+      const stored = localStorage.getItem('bambuddy-inventory-pageSize');
+      if (stored) {
+        const n = Number(stored);
+        if ([15, 30, 50, 100, -1].includes(n)) return n;
+      }
+    } catch { /* ignore */ }
+    return 15;
+  });
 
   const { data: spools, isLoading } = useQuery({
     queryKey: ['inventory-spools'],
     queryFn: () => api.getSpools(true), // Always fetch all, filter client-side
+    refetchInterval: 30000,
   });
 
   const { data: assignments } = useQuery({
     queryKey: ['spool-assignments'],
     queryFn: () => api.getAssignments(),
+    refetchInterval: 30000,
   });
 
   const deleteMutation = useMutation({
@@ -390,11 +451,6 @@ export default function InventoryPage() {
     return filtered;
   }, [spools, archiveFilter, usageFilter, materialFilter, brandFilter, search]);
 
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredSpools.length / pageSize));
-  const safePageIndex = Math.min(pageIndex, totalPages - 1);
-  const pagedSpools = filteredSpools.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize);
-
   // Reset page on filter changes
   const resetPage = () => setPageIndex(0);
 
@@ -415,6 +471,50 @@ export default function InventoryPage() {
     () => columnConfig.filter((c) => c.visible).map((c) => c.id),
     [columnConfig]
   );
+
+  const handleSort = (colId: string) => {
+    if (!columnSortValues[colId]) return; // Not sortable
+    setSortState((prev) => {
+      let next: SortState;
+      if (prev?.column === colId) {
+        // Toggle direction, or clear on third click
+        next = prev.direction === 'asc' ? { column: colId, direction: 'desc' } : null;
+      } else {
+        next = { column: colId, direction: 'asc' };
+      }
+      saveSortState(next);
+      return next;
+    });
+    resetPage();
+  };
+
+  // Sort filtered spools
+  const sortedSpools = useMemo(() => {
+    if (!sortState) return filteredSpools;
+    const extractor = columnSortValues[sortState.column];
+    if (!extractor) return filteredSpools;
+    const sorted = [...filteredSpools].sort((a, b) => {
+      const va = extractor(a, assignmentMap);
+      const vb = extractor(b, assignmentMap);
+      if (va < vb) return sortState.direction === 'asc' ? -1 : 1;
+      if (va > vb) return sortState.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [filteredSpools, sortState, assignmentMap]);
+
+  // Pagination (after sorting) — pageSize -1 means "All"
+  const showAll = pageSize === -1;
+  const effectivePageSize = showAll ? sortedSpools.length || 1 : pageSize;
+  const totalPages = Math.max(1, Math.ceil(sortedSpools.length / effectivePageSize));
+  const safePageIndex = showAll ? 0 : Math.min(pageIndex, totalPages - 1);
+  const pagedSpools = showAll ? sortedSpools : sortedSpools.slice(safePageIndex * effectivePageSize, (safePageIndex + 1) * effectivePageSize);
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPageIndex(0);
+    try { localStorage.setItem('bambuddy-inventory-pageSize', String(size)); } catch { /* ignore */ }
+  };
 
   const clearAllFilters = () => {
     setArchiveFilter('active');
@@ -527,15 +627,17 @@ export default function InventoryPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Columns button */}
-          <button
-            onClick={() => setShowColumnModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-bambu-gray border border-bambu-dark-tertiary rounded-lg hover:bg-bambu-dark-tertiary transition-colors"
-            title={t('inventory.configureColumns')}
-          >
-            <Columns className="w-4 h-4" />
-            <span className="hidden sm:inline">{t('inventory.columns')}</span>
-          </button>
+          {/* Columns button (table view only) */}
+          {viewMode === 'table' && (
+            <button
+              onClick={() => setShowColumnModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-bambu-gray border border-bambu-dark-tertiary rounded-lg hover:bg-bambu-dark-tertiary transition-colors"
+              title={t('inventory.configureColumns')}
+            >
+              <Columns className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('inventory.columns')}</span>
+            </button>
+          )}
           {/* Table / Cards toggle */}
           <div className="flex bg-bambu-dark-primary border border-bambu-dark-tertiary rounded-lg overflow-hidden">
             <button
@@ -679,7 +781,7 @@ export default function InventoryPage() {
 
         {/* Results count */}
         <span className="ml-auto text-xs text-bambu-gray">
-          {filteredSpools.length} {filteredSpools.length !== 1 ? t('inventory.spools') : t('inventory.spool')}
+          {sortedSpools.length} {sortedSpools.length !== 1 ? t('inventory.spools') : t('inventory.spool')}
         </span>
       </div>
 
@@ -760,10 +862,10 @@ export default function InventoryPage() {
             <PaginationBar
               pageIndex={safePageIndex}
               pageSize={pageSize}
-              totalRows={filteredSpools.length}
+              totalRows={sortedSpools.length}
               totalPages={totalPages}
               onPageChange={setPageIndex}
-              onPageSizeChange={(size) => { setPageSize(size); resetPage(); }}
+              onPageSizeChange={handlePageSizeChange}
               t={t}
             />
           </>
@@ -782,14 +884,30 @@ export default function InventoryPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-bambu-dark-tertiary bg-bambu-dark-tertiary/30">
-                    {visibleColumns.map((colId) => (
-                      <th
-                        key={colId}
-                        className={`text-left py-3 px-4 text-xs font-medium text-bambu-gray uppercase tracking-wide ${colId === 'remaining' ? 'min-w-[150px]' : ''}`}
-                      >
-                        {columnHeaders[colId]?.(t) ?? colId}
-                      </th>
-                    ))}
+                    {visibleColumns.map((colId) => {
+                      const sortable = !!columnSortValues[colId];
+                      const isActive = sortState?.column === colId;
+                      return (
+                        <th
+                          key={colId}
+                          className={`text-left py-3 px-4 text-xs font-medium uppercase tracking-wide select-none ${colId === 'remaining' ? 'min-w-[150px]' : ''} ${
+                            sortable ? 'cursor-pointer hover:text-bambu-green transition-colors' : ''
+                          } ${isActive ? 'text-bambu-green' : 'text-bambu-gray'}`}
+                          onClick={sortable ? () => handleSort(colId) : undefined}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {columnHeaders[colId]?.(t) ?? colId}
+                            {sortable && (
+                              isActive
+                                ? sortState.direction === 'asc'
+                                  ? <ArrowUp className="w-3 h-3" />
+                                  : <ArrowDown className="w-3 h-3" />
+                                : <ArrowUpDown className="w-3 h-3 opacity-30" />
+                            )}
+                          </span>
+                        </th>
+                      );
+                    })}
                     <th className="text-right py-3 px-4 text-xs font-medium text-bambu-gray uppercase tracking-wide">{t('common.actions')}</th>
                   </tr>
                 </thead>
@@ -859,56 +977,64 @@ export default function InventoryPage() {
             {/* Pagination inside card footer */}
             <div className="flex items-center justify-between px-4 py-3 bg-bambu-dark-tertiary/50 border-t border-bambu-dark-tertiary text-sm">
               <span className="text-bambu-gray">
-                {t('inventory.showing')} {safePageIndex * pageSize + 1} {t('inventory.to')}{' '}
-                {Math.min((safePageIndex + 1) * pageSize, filteredSpools.length)}{' '}
-                {t('inventory.of')} {filteredSpools.length} {t('inventory.spools')}
+                {showAll
+                  ? `${sortedSpools.length} ${sortedSpools.length !== 1 ? t('inventory.spools') : t('inventory.spool')}`
+                  : <>{t('inventory.showing')} {safePageIndex * effectivePageSize + 1} {t('inventory.to')}{' '}
+                    {Math.min((safePageIndex + 1) * effectivePageSize, sortedSpools.length)}{' '}
+                    {t('inventory.of')} {sortedSpools.length} {t('inventory.spools')}</>
+                }
               </span>
 
               <div className="flex items-center gap-2">
                 <span className="text-bambu-gray">{t('inventory.show')}</span>
                 <select
                   value={pageSize}
-                  onChange={(e) => { setPageSize(Number(e.target.value)); resetPage(); }}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
                   className="px-2 py-1 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded text-white text-sm focus:outline-none focus:border-bambu-green"
                 >
                   {[15, 30, 50, 100].map((n) => (
                     <option key={n} value={n}>{n}</option>
                   ))}
+                  <option value={-1}>{t('inventory.all')}</option>
                 </select>
 
-                <button
-                  onClick={() => setPageIndex(0)}
-                  disabled={safePageIndex === 0}
-                  className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  title="First page"
-                >
-                  <ChevronsLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
-                  disabled={safePageIndex === 0}
-                  className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-bambu-gray px-2 whitespace-nowrap">
-                  {t('inventory.page')} {safePageIndex + 1} {t('inventory.of')} {totalPages}
-                </span>
-                <button
-                  onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))}
-                  disabled={safePageIndex >= totalPages - 1}
-                  className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setPageIndex(totalPages - 1)}
-                  disabled={safePageIndex >= totalPages - 1}
-                  className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  title="Last page"
-                >
-                  <ChevronsRight className="w-4 h-4" />
-                </button>
+                {!showAll && (
+                  <>
+                    <button
+                      onClick={() => setPageIndex(0)}
+                      disabled={safePageIndex === 0}
+                      className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="First page"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
+                      disabled={safePageIndex === 0}
+                      className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-bambu-gray px-2 whitespace-nowrap">
+                      {t('inventory.page')} {safePageIndex + 1} {t('inventory.of')} {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))}
+                      disabled={safePageIndex >= totalPages - 1}
+                      className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setPageIndex(totalPages - 1)}
+                      disabled={safePageIndex >= totalPages - 1}
+                      className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Last page"
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -954,13 +1080,18 @@ function PaginationBar({
   onPageSizeChange: (size: number) => void;
   t: (key: string) => string;
 }) {
-  if (totalPages <= 1) return null;
+  const isShowAll = pageSize === -1;
+  if (totalPages <= 1 && !isShowAll) return null;
+  const effectiveSize = isShowAll ? totalRows || 1 : pageSize;
   return (
     <div className="flex items-center justify-between pt-2 text-sm">
       <span className="text-bambu-gray">
-        {t('inventory.showing')} {pageIndex * pageSize + 1} {t('inventory.to')}{' '}
-        {Math.min((pageIndex + 1) * pageSize, totalRows)}{' '}
-        {t('inventory.of')} {totalRows} {t('inventory.spools')}
+        {isShowAll
+          ? `${totalRows} ${totalRows !== 1 ? t('inventory.spools') : t('inventory.spool')}`
+          : <>{t('inventory.showing')} {pageIndex * effectiveSize + 1} {t('inventory.to')}{' '}
+              {Math.min((pageIndex + 1) * effectiveSize, totalRows)}{' '}
+              {t('inventory.of')} {totalRows} {t('inventory.spools')}</>
+        }
       </span>
       <div className="flex items-center gap-2">
         <span className="text-bambu-gray">{t('inventory.show')}</span>
@@ -972,38 +1103,43 @@ function PaginationBar({
           {[15, 30, 50, 100].map((n) => (
             <option key={n} value={n}>{n}</option>
           ))}
+          <option value={-1}>{t('inventory.all')}</option>
         </select>
-        <button
-          onClick={() => onPageChange(0)}
-          disabled={pageIndex === 0}
-          className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <ChevronsLeft className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => onPageChange(Math.max(0, pageIndex - 1))}
-          disabled={pageIndex === 0}
-          className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-        <span className="text-bambu-gray px-2 whitespace-nowrap">
-          {t('inventory.page')} {pageIndex + 1} {t('inventory.of')} {totalPages}
-        </span>
-        <button
-          onClick={() => onPageChange(Math.min(totalPages - 1, pageIndex + 1))}
-          disabled={pageIndex >= totalPages - 1}
-          className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => onPageChange(totalPages - 1)}
-          disabled={pageIndex >= totalPages - 1}
-          className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <ChevronsRight className="w-4 h-4" />
-        </button>
+        {!isShowAll && (
+          <>
+            <button
+              onClick={() => onPageChange(0)}
+              disabled={pageIndex === 0}
+              className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => onPageChange(Math.max(0, pageIndex - 1))}
+              disabled={pageIndex === 0}
+              className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-bambu-gray px-2 whitespace-nowrap">
+              {t('inventory.page')} {pageIndex + 1} {t('inventory.of')} {totalPages}
+            </span>
+            <button
+              onClick={() => onPageChange(Math.min(totalPages - 1, pageIndex + 1))}
+              disabled={pageIndex >= totalPages - 1}
+              className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => onPageChange(totalPages - 1)}
+              disabled={pageIndex >= totalPages - 1}
+              className="p-1.5 rounded text-bambu-gray hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronsRight className="w-4 h-4" />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

@@ -2834,7 +2834,7 @@ function PrinterCard({
                                               brand: assignment.spool.brand,
                                               color_name: assignment.spool.color_name,
                                             } : null,
-                                            onAssignSpool: () => setAssignSpoolModal({
+                                            onAssignSpool: filamentData.vendor !== 'Bambu Lab' ? () => setAssignSpoolModal({
                                               printerId: printer.id,
                                               amsId: ams.id,
                                               trayId: slotIdx,
@@ -2843,8 +2843,8 @@ function PrinterCard({
                                                 color: filamentData.colorHex || '',
                                                 location: `${getAmsLabel(ams.id, ams.tray.length)} Slot ${slotIdx + 1}`,
                                               },
-                                            }),
-                                            onUnassignSpool: assignment ? () => onUnassignSpool?.(printer.id, ams.id, slotIdx) : undefined,
+                                            }) : undefined,
+                                            onUnassignSpool: assignment && filamentData.vendor !== 'Bambu Lab' ? () => onUnassignSpool?.(printer.id, ams.id, slotIdx) : undefined,
                                           };
                                         })()}
                                         configureSlot={{
@@ -3068,7 +3068,7 @@ function PrinterCard({
                                           brand: assignment.spool.brand,
                                           color_name: assignment.spool.color_name,
                                         } : null,
-                                        onAssignSpool: () => setAssignSpoolModal({
+                                        onAssignSpool: filamentData.vendor !== 'Bambu Lab' ? () => setAssignSpoolModal({
                                           printerId: printer.id,
                                           amsId: ams.id,
                                           trayId: htSlotId,
@@ -3077,8 +3077,8 @@ function PrinterCard({
                                             color: filamentData.colorHex || '',
                                             location: getAmsLabel(ams.id, ams.tray.length),
                                           },
-                                        }),
-                                        onUnassignSpool: assignment ? () => onUnassignSpool?.(printer.id, ams.id, htSlotId) : undefined,
+                                        }) : undefined,
+                                        onUnassignSpool: assignment && filamentData.vendor !== 'Bambu Lab' ? () => onUnassignSpool?.(printer.id, ams.id, htSlotId) : undefined,
                                       };
                                     })()}
                                     configureSlot={{
@@ -3247,7 +3247,7 @@ function PrinterCard({
                                     brand: assignment.spool.brand,
                                     color_name: assignment.spool.color_name,
                                   } : null,
-                                  onAssignSpool: () => setAssignSpoolModal({
+                                  onAssignSpool: extFilamentData.vendor !== 'Bambu Lab' ? () => setAssignSpoolModal({
                                     printerId: printer.id,
                                     amsId: 255,
                                     trayId: 0,
@@ -3256,8 +3256,8 @@ function PrinterCard({
                                       color: extFilamentData.colorHex || '',
                                       location: 'External Spool',
                                     },
-                                  }),
-                                  onUnassignSpool: assignment ? () => onUnassignSpool?.(printer.id, 255, 0) : undefined,
+                                  }) : undefined,
+                                  onUnassignSpool: assignment && extFilamentData.vendor !== 'Bambu Lab' ? () => onUnassignSpool?.(printer.id, 255, 0) : undefined,
                                 };
                               })()}
                               configureSlot={{
@@ -4948,9 +4948,9 @@ export function PrintersPage() {
   });
 
   // Helper to find assignment for a specific slot
-  const getAssignment = (printerId: number, amsId: number, trayId: number): SpoolAssignment | undefined => {
+  const getAssignment = (printerId: number, amsId: number | string, trayId: number | string): SpoolAssignment | undefined => {
     return spoolAssignments?.find(
-      (a) => a.printer_id === printerId && a.ams_id === amsId && a.tray_id === trayId
+      (a) => a.printer_id === printerId && a.ams_id === Number(amsId) && a.tray_id === Number(trayId)
     );
   };
 

@@ -139,6 +139,28 @@ export function AdditionalSection({
         onChange={(weight) => updateField('core_weight', weight)}
       />
 
+      {/* Current Weight (remaining filament) */}
+      <div>
+        <label className="block text-sm font-medium text-bambu-gray mb-1">{t('inventory.currentWeight')}</label>
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              type="number"
+              value={Math.max(0, formData.label_weight - formData.weight_used)}
+              min={0}
+              max={formData.label_weight}
+              onChange={(e) => {
+                const remaining = parseInt(e.target.value) || 0;
+                updateField('weight_used', Math.max(0, formData.label_weight - remaining));
+              }}
+              className="w-full px-3 py-2 pr-7 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white text-sm focus:outline-none focus:border-bambu-green"
+            />
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-bambu-gray">g</span>
+          </div>
+          <span className="text-xs text-bambu-gray shrink-0">/ {formData.label_weight}g</span>
+        </div>
+      </div>
+
       {/* Note */}
       <div>
         <label className="block text-sm font-medium text-bambu-gray mb-1">{t('inventory.note')}</label>

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { X, Loader2, Package, Check, Search } from 'lucide-react';
 import { api } from '../api/client';
-import type { InventorySpool } from '../api/client';
+import type { InventorySpool, SpoolAssignment } from '../api/client';
 import { Button } from './Button';
 import { useToast } from '../contexts/ToastContext';
 
@@ -33,12 +33,25 @@ export function AssignSpoolModal({ isOpen, onClose, printerId, amsId, trayId, tr
     enabled: isOpen,
   });
 
+  const { data: assignments } = useQuery({
+    queryKey: ['spool-assignments'],
+    queryFn: () => api.getAssignments(),
+    enabled: isOpen,
+  });
+
   const assignMutation = useMutation({
     mutationFn: (spoolId: number) =>
       api.assignSpool({ spool_id: spoolId, printer_id: printerId, ams_id: amsId, tray_id: trayId }),
-    onSuccess: () => {
+    onSuccess: (newAssignment) => {
+      // Immediately update cache so UI reflects the new assignment without waiting for refetch
+      queryClient.setQueryData<SpoolAssignment[]>(['spool-assignments'], (old) => {
+        const filtered = (old || []).filter(a =>
+          !(a.printer_id === printerId && a.ams_id === amsId && a.tray_id === trayId)
+        );
+        filtered.push(newAssignment);
+        return filtered;
+      });
       queryClient.invalidateQueries({ queryKey: ['spool-assignments'] });
-      queryClient.invalidateQueries({ queryKey: ['printer-status'] });
       showToast(t('inventory.assignSuccess'), 'success');
       onClose();
     },
@@ -49,7 +62,18 @@ export function AssignSpoolModal({ isOpen, onClose, printerId, amsId, trayId, tr
 
   if (!isOpen) return null;
 
-  const filteredSpools = spools?.filter((spool: InventorySpool) => {
+  // Filter out Bambu Lab spools (identified by RFID tag_uid or tray_uuid)
+  // and spools already assigned to other slots
+  const assignedSpoolIds = new Set(
+    (assignments || [])
+      .filter(a => !(a.printer_id === printerId && a.ams_id === amsId && a.tray_id === trayId))
+      .map(a => a.spool_id)
+  );
+  const manualSpools = spools?.filter((spool: InventorySpool) =>
+    !spool.tag_uid && !spool.tray_uuid && !assignedSpoolIds.has(spool.id)
+  );
+
+  const filteredSpools = manualSpools?.filter((spool: InventorySpool) => {
     if (!searchFilter) return true;
     const q = searchFilter.toLowerCase();
     return (
@@ -101,7 +125,7 @@ export function AssignSpoolModal({ isOpen, onClose, printerId, amsId, trayId, tr
                     style={{ backgroundColor: `#${trayInfo.color}` }}
                   />
                 )}
-                <span className="text-white font-medium">{trayInfo.type || 'Empty'}</span>
+                <span className="text-white font-medium">{trayInfo.type || t('ams.emptySlot')}</span>
                 <span className="text-bambu-gray">({trayInfo.location})</span>
               </div>
             </div>
@@ -161,9 +185,13 @@ export function AssignSpoolModal({ isOpen, onClose, printerId, amsId, trayId, tr
                   </button>
                 ))}
               </div>
+            ) : manualSpools && manualSpools.length === 0 ? (
+              <div className="text-center py-8 text-bambu-gray">
+                <p>{t('inventory.noManualSpools')}</p>
+              </div>
             ) : (
               <div className="text-center py-8 text-bambu-gray">
-                <p>{t('inventory.noSpools')}</p>
+                <p>{t('inventory.noSpoolsMatch')}</p>
               </div>
             )}
           </div>

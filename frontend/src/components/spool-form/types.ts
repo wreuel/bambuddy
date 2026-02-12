@@ -9,6 +9,7 @@ export interface SpoolFormData {
   rgba: string;
   label_weight: number;
   core_weight: number;
+  weight_used: number;
   slicer_filament: string;
   note: string;
 }
@@ -21,6 +22,7 @@ export const defaultFormData: SpoolFormData = {
   rgba: '808080FF',
   label_weight: 1000,
   core_weight: 250,
+  weight_used: 0,
   slicer_filament: '',
   note: '',
 };
@@ -79,6 +81,7 @@ export interface FilamentSectionProps extends SectionProps {
 export interface ColorSectionProps extends SectionProps {
   recentColors: ColorPreset[];
   onColorUsed: (color: ColorPreset) => void;
+  catalogColors: { manufacturer: string; color_name: string; hex_color: string; material: string | null }[];
 }
 
 // Additional section props

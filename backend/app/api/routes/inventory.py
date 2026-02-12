@@ -645,8 +645,12 @@ async def assign_spool(
     fingerprint_type = None
     state = printer_manager.get_status(data.printer_id)
     if state and state.raw_data:
+        ams_data = state.raw_data.get("ams", {})
+        ams_list = (
+            ams_data.get("ams", []) if isinstance(ams_data, dict) else ams_data if isinstance(ams_data, list) else []
+        )
         tray = _find_tray_in_ams_data(
-            state.raw_data.get("ams", {}).get("ams", []),
+            ams_list,
             data.ams_id,
             data.tray_id,
         )
