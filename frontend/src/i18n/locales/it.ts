@@ -967,6 +967,7 @@ export default {
     removeFromPrinter: 'Rimuovi da questa stampante',
     // Types
     types: {
+      lubricateCarbonRods: 'Lubrifica aste in carbonio',
       lubricateRails: 'Lubrifica guide lineari',
       cleanNozzle: 'Pulisci ugello/Hotend',
       checkBelts: 'Controlla tensione cinghie',
@@ -975,6 +976,7 @@ export default {
       checkCooling: 'Controlla ventole raffreddamento',
       generalInspection: 'Ispezione generale',
       cleanCarbonRods: 'Pulisci aste in carbonio',
+      cleanLinearRails: 'Pulisci guide lineari',
       checkPtfeTube: 'Controlla tubo PTFE',
       replaceHepaFilter: 'Sostituisci filtro HEPA',
       replaceCarbonFilter: 'Sostituisci filtro carbone',
@@ -2651,6 +2653,7 @@ export default {
 
   // Maintenance type descriptions (built-in)
   maintenanceDescriptions: {
+    lubricateCarbonRods: 'Applica lubrificante alle aste in carbonio per un movimento fluido',
     lubricateRails: 'Applica lubrificante alle guide lineari per un movimento fluido',
     cleanNozzle: 'Pulisci hotend e ugello per prevenire intasamenti',
     checkBelts: 'Verifica tensione cinghie per stampe accurate',
@@ -2659,6 +2662,7 @@ export default {
     checkCooling: 'Assicurati che le ventole di raffreddamento funzionino',
     generalInspection: 'Ispezione generale stampante',
     cleanCarbonRods: 'Pulisci le aste in carbonio per ridurre attrito',
+    cleanLinearRails: 'Pulisci le guide lineari per rimuovere polvere e detriti',
     checkPtfeTube: 'Ispeziona il tubo PTFE per usura o danni',
     replaceHepaFilter: 'Sostituisci filtro HEPA per qualità aria',
     replaceCarbonFilter: 'Sostituisci filtro a carbone attivo',

@@ -1015,6 +1015,7 @@ export default {
     noPrintersAssigned: 'プリンター未割り当て',
     removeFromPrinter: 'このプリンターから削除',
     types: {
+      lubricateCarbonRods: 'カーボンロッドの潤滑',
       lubricateRails: 'リニアレールの潤滑',
       cleanNozzle: 'ノズル/ホットエンドの清掃',
       checkBelts: 'ベルト張力の確認',
@@ -1023,6 +1024,7 @@ export default {
       checkCooling: '冷却ファンの確認',
       generalInspection: '総合点検',
       cleanCarbonRods: 'カーボンロッドの清掃',
+      cleanLinearRails: 'リニアレールの清掃',
       checkPtfeTube: 'PTFEチューブの確認',
       replaceHepaFilter: 'HEPAフィルター交換',
       replaceCarbonFilter: 'カーボンフィルター交換',
@@ -2860,6 +2862,7 @@ export default {
     },
   },
   maintenanceDescriptions: {
+    lubricateCarbonRods: 'カーボンロッドに潤滑剤を塗布してスムーズな動きを確保',
     lubricateRails: 'リニアレールの潤滑',
     cleanNozzle: 'ノズル/ホットエンドの清掃',
     checkBelts: 'ベルト張力の確認',
@@ -2868,6 +2871,7 @@ export default {
     checkCooling: '冷却ファンの確認',
     generalInspection: '総合点検',
     cleanCarbonRods: 'カーボンロッドの清掃',
+    cleanLinearRails: 'リニアレールを拭いてほこりや汚れを除去',
     checkPtfeTube: 'PTFEチューブの確認',
     replaceHepaFilter: 'HEPAフィルター交換',
     replaceCarbonFilter: 'カーボンフィルター交換',
