@@ -335,12 +335,14 @@ async def on_printer_status_change(printer_id: int, state: PrinterState):
     bed_target = round(temps.get("bed_target", 0))
     nozzle_target = round(temps.get("nozzle_target", 0))
 
+    # Include tray_now and vt_tray hash so external spool changes trigger broadcasts
+    vt_tray_key = hash(str(state.raw_data.get("vt_tray", []))) if state.raw_data else 0
     status_key = (
         f"{state.connected}:{state.state}:{state.progress}:{state.layer_num}:"
         f"{nozzle_temp}:{bed_temp}:{nozzle_2_temp}:{chamber_temp}:"
         f"{state.stg_cur}:{bed_target}:{nozzle_target}:"
         f"{state.cooling_fan_speed}:{state.big_fan1_speed}:{state.big_fan2_speed}:"
-        f"{state.chamber_light}:{state.active_extruder}"
+        f"{state.chamber_light}:{state.active_extruder}:{state.tray_now}:{vt_tray_key}"
     )
 
     # MQTT relay - publish status (before dedup check - always publish to MQTT)
@@ -707,6 +709,7 @@ async def on_ams_change(printer_id: int, ams_data: list):
                                 spool,
                                 printer_manager,
                                 db,
+                                tray_info_idx=tray_info_idx,
                             )
                             await db.commit()
                             await ws_manager.broadcast(
