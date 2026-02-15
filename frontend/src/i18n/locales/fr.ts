@@ -171,6 +171,8 @@ export default {
     // Printer card
     readyToPrint: 'Prête à imprimer',
     external: 'Externe',
+    extL: 'Ext-L',
+    extR: 'Ext-R',
     deleteArchives: 'Supprimer les archives d\'impression',
     noLabel: 'Pas d\'étiquette',
     printPreview: 'Aperçu avant impression',
@@ -1166,6 +1168,7 @@ export default {
     builtInFeatureRfid: 'Détecte auto les bobines RFID Bambu Lab dans l\'AMS',
     builtInFeatureUsage: 'Suit la consommation par impression',
     builtInFeatureCatalog: 'Gère bobines, couleurs et profils facteur K',
+    builtInFeatureThirdParty: 'Les bobines tierces peuvent être assignées aux bobines d\'inventaire',
     // Spoolman settings
     spoolmanUrl: 'URL Spoolman',
     spoolmanUrlHint: 'URL de votre serveur Spoolman (ex: http://localhost:7912)',
@@ -2497,6 +2500,7 @@ export default {
     spoolArchived: 'Bobine archivée',
     spoolRestored: 'Bobine restaurée',
     deleteConfirm: 'Supprimer définitivement cette bobine ?',
+    archiveConfirm: 'Voulez-vous vraiment archiver cette bobine ?',
     advancedSettings: 'Paramètres Avancés',
     // Tabs
     filamentInfoTab: 'Infos Filament',
@@ -3214,15 +3218,37 @@ export default {
 
   // Configure AMS Slot Modal
   configureAmsSlot: {
+    title: 'Configurer le slot AMS',
+    slotConfigured: 'Slot configuré !',
+    configuringSlot: 'Configuration du slot :',
+    slotLabel: '{{ams}} Slot {{slot}}',
     searchPresets: 'Chercher presets...',
     colorPlaceholder: 'Nom couleur ou hex (ex: brown, FF8800)',
     clearCustomColor: 'Effacer couleur perso',
     noCloudPresets: 'Profils Cloud absents. Connectez-vous.',
+    noPresetsAvailable: 'Aucun preset disponible. Connectez-vous à Bambu Cloud ou importez des profils locaux.',
     noMatchingPresets: 'Aucun profil trouvé.',
     custom: 'Perso',
     builtin: 'Inclus',
     settingsSentToPrinter: 'Réglages envoyés',
     filamentProfile: 'Profil Filament',
+    kProfileLabel: 'Profil K (Pressure Advance)',
+    filteringFor: 'Filtrage pour : {{material}}',
+    noKProfile: 'Pas de profil K (utiliser défaut 0.020)',
+    noMatchingKProfiles: 'Aucun profil K trouvé. K=0.020 par défaut sera utilisé.',
+    selectFilamentFirst: 'Sélectionnez d\'abord un profil filament',
+    kFromCalibration: 'K={{value}} de la calibration imprimante',
+    customColorLabel: 'Couleur personnalisée (optionnel)',
+    presetColors: 'Couleurs {{name}} :',
+    showLessColors: 'Moins de couleurs',
+    showMoreColors: 'Plus de couleurs',
+    clear: 'Effacer',
+    hexLabel: 'Hex : #{{hex}}',
+    resetting: 'Réinitialisation...',
+    resetSlot: 'Réinitialiser le slot',
+    cancel: 'Annuler',
+    configuring: 'Configuration...',
+    configureSlot: 'Configurer le slot',
   },
 
   // GitHub Backup Settings

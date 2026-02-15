@@ -267,6 +267,7 @@ export function SpoolmanSettings() {
                   <li>{t('settings.builtInFeatureRfid')}</li>
                   <li>{t('settings.builtInFeatureUsage')}</li>
                   <li>{t('settings.builtInFeatureCatalog')}</li>
+                  <li>{t('settings.builtInFeatureThirdParty')}</li>
                 </ul>
               </div>
             </div>
