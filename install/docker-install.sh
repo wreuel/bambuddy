@@ -398,6 +398,14 @@ parse_args() {
     done
 }
 
+check_sudo() {
+    if ! command -v sudo &>/dev/null; then
+        log_error "sudo is required for iptables redirect but is not installed. Skipping iptables redirect."
+        return 1
+    fi
+    return 0
+}
+
 configure_iptables_redirect() {
     if [[ "$OS_TYPE" != "linux" ]]; then
         log_warn "iptables redirect only supported on Linux. Skipping."
@@ -405,6 +413,10 @@ configure_iptables_redirect() {
     fi
 
     if [[ "$REDIRECT_990" != "true" ]]; then
+        return
+    fi
+
+    if ! check_sudo; then
         return
     fi
 
@@ -451,11 +463,16 @@ gather_config() {
     fi
 
     # Redirect port 990 -> 9990 (Linux only)
-    if [[ "$OS_TYPE" == "linux" ]] && [[ "$REDIRECT_990" != "true" ]]; then
-        echo ""
-        echo "Optional network configuration:"
-        if prompt_yes_no "Add iptables redirect (990 -> 9990)?" "n"; then
-            REDIRECT_990="true"
+    if [[ "$OS_TYPE" == "linux" ]]; then
+        if [[ "$NON_INTERACTIVE" == "true" ]]; then
+            # In non-interactive mode, only set REDIRECT_990 if explicitly passed
+            : # Do nothing, REDIRECT_990 is set only if --redirect-990 is passed
+        elif [[ "$REDIRECT_990" != "true" ]]; then
+            echo ""
+            echo "Optional network configuration:"
+            if prompt_yes_no "Add iptables redirect (990 -> 9990)?" "n"; then
+                REDIRECT_990="true"
+            fi
         fi
     fi
 
