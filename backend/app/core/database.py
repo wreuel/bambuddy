@@ -73,8 +73,8 @@ async def get_db() -> AsyncSession:
             await session.close()
 
 
-async def init_db():
-    # Import models to register them with SQLAlchemy
+def _register_models():
+    """Import all models to register them with SQLAlchemy's Base.metadata."""
     from backend.app.models import (  # noqa: F401
         active_print_spoolman,
         ams_history,
@@ -109,21 +109,48 @@ async def init_db():
         user,
     )
 
+
+async def _seed_defaults():
+    """Seed default data (shared by both SQLite and MySQL init paths)."""
+    await seed_notification_templates()
+    await seed_default_groups()
+    await seed_spool_catalog()
+    await seed_color_catalog()
+
+
+async def _init_db_mysql():
+    """Initialize MySQL database using Alembic migrations."""
+    import logging
+
+    from alembic import command
+    from alembic.config import Config
+
+    logger = logging.getLogger(__name__)
+
+    _register_models()
+
+    alembic_cfg = Config("backend/alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Alembic migrations applied for MySQL")
+
+    await _seed_defaults()
+
+
+async def init_db():
+    if settings.is_mysql:
+        await _init_db_mysql()
+        return
+
+    # SQLite path — existing logic unchanged
+    _register_models()
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
         # Run migrations for new columns (SQLite doesn't auto-add columns)
         await run_migrations(conn)
 
-    # Seed default notification templates
-    await seed_notification_templates()
-
-    # Seed default groups and migrate existing users
-    await seed_default_groups()
-
-    # Seed default catalog entries
-    await seed_spool_catalog()
-    await seed_color_catalog()
+    await _seed_defaults()
 
 
 async def run_migrations(conn):
