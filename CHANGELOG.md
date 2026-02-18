@@ -4,6 +4,22 @@ All notable changes to Bambuddy will be documented in this file.
 
 ## [0.2.1] - Not released
 
+### Fixed
+- **Nozzle Mapping Uses Wrong Source in 3MF Files** — The `extract_nozzle_mapping_from_3mf()` function used `filament_nozzle_map` (user preference) as the primary source for nozzle assignments. BambuStudio's "Auto For Flush" mode overrides user preferences at slice time, so the actual assignment lives in the `group_id` attribute on `<filament>` elements in `slice_info.config`. Now uses `group_id` as the primary source and falls back to `filament_nozzle_map` only when `group_id` is not present.
+- **Print Scheduler Hard-Filters Nozzle When No Trays on Target Nozzle** — On dual-nozzle printers, the scheduler enforced a strict nozzle filter when matching filaments. If a slicer filament was assigned to a nozzle with no AMS trays (e.g., only external spool on left nozzle), the match failed even though the filament existed on the other nozzle. Now falls back to unfiltered matching when no trays exist on the target nozzle.
+- **Print Scheduler External Spool Ignores Nozzle Assignment** — The external spool fallback in the scheduler always mapped to extruder 0 (right), ignoring the slicer's nozzle assignment. Now uses the 3MF nozzle mapping to select the correct extruder for external spool matches.
+- **ams_extruder_map Race Condition on Printer Status API** — The `/printers/{id}/status` endpoint read `ams_extruder_map` from the MQTT state without checking if the AMS data had been received yet. On fresh connections before the first AMS push-all, this returned an empty map — causing the frontend nozzle filter to show all trays as unfiltered. Now returns an empty object gracefully and the frontend disables nozzle filtering until the map is populated.
+- **Filament Mapping Frontend Ignores Nozzle for External Spools** — The `useFilamentMapping` hook always set `extruder_id: 0` for external spool matches. Now uses the nozzle mapping from the 3MF file to determine the correct extruder.
+- **AMS-HT Global Tray ID Computed Wrong on Printer Card** — The PrintersPage computed AMS-HT tray IDs using `ams_id * 4 + slot` (giving 512+), but AMS-HT units use their raw `ams_id` (128-135) as the global tray ID. Now uses `ams_id` directly for AMS-HT units.
+- **Filament Mapping Dropdown Shows Wrong Nozzle Trays** — The FilamentMapping dropdown filtered by `extruder_id` using strict equality, but `extruder_id` could be `undefined` for printers that hadn't reported their AMS extruder map yet. This caused all trays to be hidden. Now skips nozzle filtering when `extruder_id` is undefined.
+- **Cancelled Print Usage Tracking Uses Stale Progress/Layer** — When a print was cancelled, the usage tracker read `mc_percent` and `layer_num` from the printer's MQTT state — but by the time the `on_print_complete` callback ran, the printer had already reset these to 0. Now captures the last valid progress and layer values during printing, and the usage tracker reads these captured values on cancellation for accurate partial usage.
+- **H2D Tray Disambiguation Triggers on Single-Nozzle Printers** — The `tray_now <= 3` check for H2D dual-nozzle disambiguation matched any printer loading from AMS 0 (trays 0-3). On P2S, X1C, and X1E with multiple AMS units, this caused warning log spam every second. Now uses a persistent `_is_dual_nozzle` flag detected from `device.extruder.info` (>= 2 entries), which only dual-nozzle printers (H2D, H2D Pro) report.
+- **AMS-HT Snow Slot Mismatch Log Spam on H2D** — The snow-based tray_now disambiguation computed `snow_slot = -1` for AMS-HT trays (IDs 128-135), causing a "slot mismatch" debug log on every MQTT update even though the result was correct. Now correctly computes `snow_slot = 0` for AMS-HT single-slot units.
+- **Color Tooltip Clipped Behind Adjacent Swatches** — Color swatch hover tooltips in the spool form were rendered behind neighboring swatches due to missing z-index on the hover state. Added `hover:z-20` and tooltip `z-20` classes.
+
+### Improved
+- **AMS Mapping Test Coverage** — Added 63 backend tests for scheduler AMS mapping (nozzle filtering, external spool extruder assignment, fallback behavior) and 43 frontend tests for `useFilamentMapping` hook (nozzle-aware matching, AMS-HT handling, external spool extruder logic).
+
 
 ## [0.2.0] - 2026-02-17
 

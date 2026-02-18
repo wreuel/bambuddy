@@ -960,7 +960,8 @@ class BambuMQTTClient:
                         if snow_tray is not None and snow_tray != 255:
                             # snow_tray is already normalized to global ID
                             # Verify the slot matches what we see in tray_now
-                            snow_slot = snow_tray % 4 if snow_tray < 128 else -1
+                            # Regular AMS: slot = global_id % 4; AMS HT (128-135): single slot = 0
+                            snow_slot = snow_tray % 4 if snow_tray < 128 else (0 if snow_tray <= 135 else -1)
                             if snow_slot == parsed_tray_now:
                                 if self.state.tray_now != snow_tray:
                                     logger.debug(
