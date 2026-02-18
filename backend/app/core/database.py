@@ -17,13 +17,19 @@ def _set_sqlite_pragmas(dbapi_conn, connection_record):
     cursor.close()
 
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.debug,
-)
+def _build_engine_kwargs():
+    """Build engine keyword arguments based on the database type."""
+    kwargs = {"echo": settings.debug}
+    if settings.is_mysql:
+        kwargs["pool_recycle"] = 3600  # Reconnect before MySQL's default 8hr timeout
+        kwargs["pool_pre_ping"] = True  # Verify connections are alive
+    return kwargs
 
-# Register the pragma listener on the underlying sync engine
-event.listen(engine.sync_engine, "connect", _set_sqlite_pragmas)
+
+engine = create_async_engine(settings.database_url, **_build_engine_kwargs())
+
+if settings.is_sqlite:
+    event.listen(engine.sync_engine, "connect", _set_sqlite_pragmas)
 
 async_session = async_sessionmaker(
     engine,
@@ -41,11 +47,9 @@ async def close_all_connections():
 async def reinitialize_database():
     """Reinitialize database connection after restore."""
     global engine, async_session
-    engine = create_async_engine(
-        settings.database_url,
-        echo=settings.debug,
-    )
-    event.listen(engine.sync_engine, "connect", _set_sqlite_pragmas)
+    engine = create_async_engine(settings.database_url, **_build_engine_kwargs())
+    if settings.is_sqlite:
+        event.listen(engine.sync_engine, "connect", _set_sqlite_pragmas)
     async_session = async_sessionmaker(
         engine,
         class_=AsyncSession,
