@@ -1,9 +1,26 @@
-from sqlalchemy import event
+from sqlalchemy import event, func, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from backend.app.core.config import settings
+
+
+async def upsert_setting(db: AsyncSession, key: str, value: str) -> None:
+    """Cross-database upsert for the settings table."""
+    from backend.app.models.settings import Settings as SettingsModel
+
+    if settings.is_mysql:
+        from sqlalchemy.dialects.mysql import insert as mysql_insert
+
+        stmt = mysql_insert(SettingsModel).values(key=key, value=value)
+        stmt = stmt.on_duplicate_key_update(value=value, updated_at=func.now())
+    else:
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        stmt = sqlite_insert(SettingsModel).values(key=key, value=value)
+        stmt = stmt.on_conflict_do_update(index_elements=["key"], set_={"value": value, "updated_at": func.now()})
+    await db.execute(stmt)
 
 
 def _set_sqlite_pragmas(dbapi_conn, connection_record):
@@ -118,19 +135,62 @@ async def _seed_defaults():
     await seed_color_catalog()
 
 
+async def _ensure_mysql_database():
+    """Create the MySQL database if it doesn't exist."""
+    import logging
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine as create_temp_engine
+
+    logger = logging.getLogger(__name__)
+
+    # Connect to MySQL without a database name
+    server_url = f"mysql+aiomysql://{settings.db_user}:{settings.db_password}@{settings.db_host}:{settings.db_port}/"
+    temp_engine = create_temp_engine(server_url, echo=settings.debug)
+
+    try:
+        async with temp_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    f"CREATE DATABASE IF NOT EXISTS `{settings.db_name}`"
+                    f" CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+                )
+            )
+            logger.info("Ensured MySQL database '%s' exists", settings.db_name)
+    finally:
+        await temp_engine.dispose()
+
+
 async def _init_db_mysql():
     """Initialize MySQL database using Alembic migrations."""
     import logging
 
-    from alembic import command
     from alembic.config import Config
+    from alembic.runtime.environment import EnvironmentContext
+    from alembic.script import ScriptDirectory
 
     logger = logging.getLogger(__name__)
+
+    await _ensure_mysql_database()
 
     _register_models()
 
     alembic_cfg = Config("backend/alembic.ini")
-    command.upgrade(alembic_cfg, "head")
+    script = ScriptDirectory.from_config(alembic_cfg)
+
+    def do_upgrade(rev, context):
+        return script._upgrade_revs("head", rev)
+
+    async with engine.begin() as conn:
+
+        def run_alembic(connection):
+            env_context = EnvironmentContext(alembic_cfg, script, fn=do_upgrade)
+            env_context.configure(connection=connection, target_metadata=Base.metadata)
+            with env_context.begin_transaction():
+                env_context.run_migrations()
+
+        await conn.run_sync(run_alembic)
+
     logger.info("Alembic migrations applied for MySQL")
 
     await _seed_defaults()
@@ -1250,7 +1310,6 @@ async def run_migrations(conn):
 
 async def seed_notification_templates():
     """Seed default notification templates if they don't exist."""
-    from sqlalchemy import select
 
     from backend.app.models.notification_template import DEFAULT_TEMPLATES, NotificationTemplate
 
@@ -1297,8 +1356,6 @@ async def seed_default_groups():
     Also migrates old permissions to new ownership-based permissions (Issue #205).
     """
     import logging
-
-    from sqlalchemy import select
 
     from backend.app.core.permissions import DEFAULT_GROUPS
     from backend.app.models.group import Group
@@ -1421,7 +1478,7 @@ async def seed_spool_catalog():
     """Seed the spool catalog with default entries if empty."""
     import logging
 
-    from sqlalchemy import func, select
+    from sqlalchemy import func
 
     from backend.app.core.catalog_defaults import DEFAULT_SPOOL_CATALOG
     from backend.app.models.spool_catalog import SpoolCatalogEntry
@@ -1444,7 +1501,7 @@ async def seed_color_catalog():
     """Seed the color catalog with default entries if empty."""
     import logging
 
-    from sqlalchemy import func, select
+    from sqlalchemy import func
 
     from backend.app.core.catalog_defaults import DEFAULT_COLOR_CATALOG
     from backend.app.models.color_catalog import ColorCatalogEntry

@@ -706,7 +706,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
         sa.Column("printer_id", sa.Integer, sa.ForeignKey("printers.id", ondelete="CASCADE"), nullable=False),
         sa.Column("setting_id", sa.String(100), nullable=False),
-        sa.Column("note", sa.Text, server_default=""),
+        sa.Column("note", sa.Text, nullable=False),
         sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime, server_default=sa.func.now(), onupdate=sa.func.now()),
     )
