@@ -226,7 +226,7 @@ async def get_printer_status(
 
     # Determine cover URL if there's an active print (including paused)
     cover_url = None
-    if state.state in ("RUNNING", "PAUSE", "PAUSED") and state.gcode_file:
+    if state.state in ("RUNNING", "PAUSE") and state.gcode_file:
         cover_url = f"/api/v1/printers/{printer_id}/cover"
 
     # Convert HMS errors to response format

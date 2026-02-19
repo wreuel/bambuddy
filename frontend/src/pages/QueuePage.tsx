@@ -76,7 +76,7 @@ function StatusBadge({ status, waitingReason, printerState, t }: { status: Print
   }
 
   // Special case: printing but printer is paused
-  if (status === 'printing' && (printerState === 'PAUSE' || printerState === 'PAUSED')) {
+  if (status === 'printing' && printerState === 'PAUSE') {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border text-yellow-400 bg-yellow-400/10 border-yellow-400/20">
         <Pause className="w-3.5 h-3.5" />

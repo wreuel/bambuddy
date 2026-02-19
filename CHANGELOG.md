@@ -5,6 +5,7 @@ All notable changes to Bambuddy will be documented in this file.
 ## [0.2.1b] - Not released
 
 ### Fixed
+- **PAUSED State Never Matched** ([#447](https://github.com/maziggy/bambuddy/issues/447)) — Removed dead `PAUSED` checks across frontend and backend. The printer only sends `PAUSE` via MQTT `gcode_state`, so `PAUSED` comparisons were unreachable code.
 - **Nozzle Mapping Uses Wrong Source in 3MF Files** — The `extract_nozzle_mapping_from_3mf()` function used `filament_nozzle_map` (user preference) as the primary source for nozzle assignments. BambuStudio's "Auto For Flush" mode overrides user preferences at slice time, so the actual assignment lives in the `group_id` attribute on `<filament>` elements in `slice_info.config`. Now uses `group_id` as the primary source and falls back to `filament_nozzle_map` only when `group_id` is not present.
 - **Print Scheduler Hard-Filters Nozzle When No Trays on Target Nozzle** — On dual-nozzle printers, the scheduler enforced a strict nozzle filter when matching filaments. If a slicer filament was assigned to a nozzle with no AMS trays (e.g., only external spool on left nozzle), the match failed even though the filament existed on the other nozzle. Now falls back to unfiltered matching when no trays exist on the target nozzle.
 - **Print Scheduler External Spool Ignores Nozzle Assignment** — The external spool fallback in the scheduler always mapped to extruder 0 (right), ignoring the slicer's nozzle assignment. Now uses the 3MF nozzle mapping to select the correct extruder for external spool matches.

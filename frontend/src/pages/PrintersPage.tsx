@@ -1776,7 +1776,7 @@ function PrinterCard({
 
   // Query for printable objects (for skip functionality)
   // Fetch when printing with 2+ objects OR when modal is open
-  const isPrintingWithObjects = (status?.state === 'RUNNING' || status?.state === 'PAUSE' || status?.state === 'PAUSED') && (status?.printable_objects_count ?? 0) >= 2;
+  const isPrintingWithObjects = (status?.state === 'RUNNING' || status?.state === 'PAUSE') && (status?.printable_objects_count ?? 0) >= 2;
   const { data: objectsData } = useQuery({
     queryKey: ['printableObjects', printer.id],
     queryFn: () => api.getPrintableObjects(printer.id),
@@ -2369,16 +2369,16 @@ function PrinterCard({
                   {/* Skip Objects button - top right corner, always visible */}
                   <button
                     onClick={() => setShowSkipObjectsModal(true)}
-                    disabled={!(status.state === 'RUNNING' || status.state === 'PAUSE' || status.state === 'PAUSED') || (status.printable_objects_count ?? 0) < 2 || !hasPermission('printers:control')}
+                    disabled={!(status.state === 'RUNNING' || status.state === 'PAUSE') || (status.printable_objects_count ?? 0) < 2 || !hasPermission('printers:control')}
                     className={`absolute top-2 right-2 p-1.5 rounded transition-colors z-10 ${
-                      (status.state === 'RUNNING' || status.state === 'PAUSE' || status.state === 'PAUSED') && (status.printable_objects_count ?? 0) >= 2 && hasPermission('printers:control')
+                      (status.state === 'RUNNING' || status.state === 'PAUSE') && (status.printable_objects_count ?? 0) >= 2 && hasPermission('printers:control')
                         ? 'text-bambu-gray hover:text-white hover:bg-white/10'
                         : 'text-bambu-gray/30 cursor-not-allowed'
                     }`}
                     title={
                       !hasPermission('printers:control')
                         ? t('printers.permission.noControl')
-                        : !(status.state === 'RUNNING' || status.state === 'PAUSE' || status.state === 'PAUSED')
+                        : !(status.state === 'RUNNING' || status.state === 'PAUSE')
                           ? t('printers.skipObjects.onlyWhilePrinting')
                           : (status.printable_objects_count ?? 0) >= 2
                             ? t('printers.skipObjects.tooltip')
@@ -2573,7 +2573,7 @@ function PrinterCard({
             {viewMode === 'expanded' && (() => {
               // Determine print state for control buttons
               const isRunning = status.state === 'RUNNING';
-              const isPaused = status.state === 'PAUSED' || status.state === 'PAUSE';
+              const isPaused = status.state === 'PAUSE';
               const isPrinting = isRunning || isPaused;
               const isControlBusy = stopPrintMutation.isPending || pausePrintMutation.isPending || resumePrintMutation.isPending;
 
