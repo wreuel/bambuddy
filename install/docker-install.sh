@@ -403,7 +403,7 @@ check_sudo() {
         log_error "sudo is required for iptables redirect but is not installed. Skipping iptables redirect."
         return 1
     fi
-     if ! command -v iptables &>/dev/null; then
+    if ! command -v iptables &>/dev/null; then
         log_error "iptables is required for iptables redirect but is not installed. Skipping iptables redirect."
         return 1
     fi
