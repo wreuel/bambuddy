@@ -1185,6 +1185,12 @@ async def run_migrations(conn):
     except OperationalError:
         pass  # Already applied
 
+    # Migration: Add core_weight_catalog_id to track which catalog entry was used for empty spool weight
+    try:
+        await conn.execute(text("ALTER TABLE spool ADD COLUMN core_weight_catalog_id INTEGER"))
+    except OperationalError:
+        pass  # Already applied
+
     # Migration: Create spool_usage_history table for filament consumption tracking
     try:
         await conn.execute(
@@ -1356,6 +1362,19 @@ async def seed_default_groups():
                     if updated:
                         group.permissions = new_permissions
 
+        await session.commit()
+
+        # Migrate new permissions: grant printers:clear_plate to all groups with printers:control
+        result = await session.execute(select(Group))
+        all_groups = result.scalars().all()
+        for group in all_groups:
+            if (
+                group.permissions
+                and "printers:control" in group.permissions
+                and "printers:clear_plate" not in group.permissions
+            ):
+                group.permissions = [*group.permissions, "printers:clear_plate"]
+                logger.info("Added printers:clear_plate to group '%s' (has printers:control)", group.name)
         await session.commit()
 
         # Migrate existing users to groups if they're not already in any group
