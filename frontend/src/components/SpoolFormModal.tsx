@@ -8,7 +8,8 @@ import { Button } from './Button';
 import { useToast } from '../contexts/ToastContext';
 import type { SpoolFormData, PrinterWithCalibrations, ColorPreset } from './spool-form/types';
 import { defaultFormData, validateForm } from './spool-form/types';
-import { buildFilamentOptions, extractBrandsFromPresets, findPresetOption, loadRecentColors, saveRecentColor } from './spool-form/utils';
+import { buildFilamentOptions, extractBrandsFromPresets, findPresetOption, loadRecentColors, parsePresetName, saveRecentColor } from './spool-form/utils';
+import { MATERIALS } from './spool-form/constants';
 import { FilamentSection } from './spool-form/FilamentSection';
 import { ColorSection } from './spool-form/ColorSection';
 import { AdditionalSection } from './spool-form/AdditionalSection';
@@ -149,10 +150,88 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
   );
 
   // Extract brands from presets
-  const availableBrands = useMemo(
-    () => extractBrandsFromPresets(cloudPresets, localPresets),
-    [cloudPresets, localPresets],
-  );
+  const baseAvailableBrands = useMemo(() => {
+    const presetBrands = extractBrandsFromPresets(cloudPresets, localPresets);
+    const catalogBrands = colorCatalog
+      .map(entry => entry.manufacturer?.trim())
+      .filter((brand): brand is string => !!brand);
+    const brandSet = new Set<string>([...presetBrands, ...catalogBrands]);
+    return Array.from(brandSet).sort((a, b) => a.localeCompare(b));
+  }, [cloudPresets, localPresets, colorCatalog]);
+
+  const baseAvailableMaterials = useMemo(() => {
+    const catalogMaterials = colorCatalog
+      .map(entry => entry.material?.trim())
+      .filter((material): material is string => !!material);
+    const materialSet = new Set<string>([...MATERIALS, ...catalogMaterials]);
+    return Array.from(materialSet).sort((a, b) => a.localeCompare(b));
+  }, [colorCatalog]);
+
+  const brandMaterialPairs = useMemo(() => {
+    const pairs: Array<{ brand: string; material: string }> = [];
+
+    for (const entry of colorCatalog) {
+      const brand = entry.manufacturer?.trim();
+      const material = entry.material?.trim();
+      if (brand && material) pairs.push({ brand, material });
+    }
+
+    for (const preset of cloudPresets) {
+      const parsed = parsePresetName(preset.name);
+      if (parsed.brand && parsed.material) {
+        pairs.push({ brand: parsed.brand, material: parsed.material });
+      }
+    }
+
+    for (const preset of localPresets) {
+      const parsed = parsePresetName(preset.name);
+      const brand = preset.filament_vendor?.trim() || parsed.brand;
+      const material = parsed.material;
+      if (brand && material) {
+        pairs.push({ brand, material });
+      }
+    }
+
+    return pairs;
+  }, [cloudPresets, colorCatalog, localPresets]);
+
+  const brandToMaterials = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const pair of brandMaterialPairs) {
+      const brandKey = pair.brand.toLowerCase();
+      const materialKey = pair.material.toLowerCase();
+      if (!map.has(brandKey)) map.set(brandKey, new Set());
+      map.get(brandKey)!.add(materialKey);
+    }
+    return map;
+  }, [brandMaterialPairs]);
+
+  const materialToBrands = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const pair of brandMaterialPairs) {
+      const brandKey = pair.brand.toLowerCase();
+      const materialKey = pair.material.toLowerCase();
+      if (!map.has(materialKey)) map.set(materialKey, new Set());
+      map.get(materialKey)!.add(brandKey);
+    }
+    return map;
+  }, [brandMaterialPairs]);
+
+  const availableBrands = useMemo(() => {
+    if (!formData.material) return baseAvailableBrands;
+    const materialKey = formData.material.toLowerCase();
+    const brandKeys = materialToBrands.get(materialKey);
+    if (!brandKeys || brandKeys.size === 0) return baseAvailableBrands;
+    return baseAvailableBrands.filter(brand => brandKeys.has(brand.toLowerCase()));
+  }, [baseAvailableBrands, formData.material, materialToBrands]);
+
+  const availableMaterials = useMemo(() => {
+    if (!formData.brand) return baseAvailableMaterials;
+    const brandKey = formData.brand.toLowerCase();
+    const materialKeys = brandToMaterials.get(brandKey);
+    if (!materialKeys || materialKeys.size === 0) return baseAvailableMaterials;
+    return baseAvailableMaterials.filter(material => materialKeys.has(material.toLowerCase()));
+  }, [baseAvailableMaterials, formData.brand, brandToMaterials]);
 
   // Find selected preset option
   const selectedPresetOption = useMemo(
@@ -434,6 +513,7 @@ export function SpoolFormModal({ isOpen, onClose, spool, printersWithCalibration
                   selectedPresetOption={selectedPresetOption}
                   filamentOptions={filamentOptions}
                   availableBrands={availableBrands}
+                  availableMaterials={availableMaterials}
                 />
                 {errors.slicer_filament && (
                   <p className="mt-1 text-xs text-red-400">{errors.slicer_filament}</p>

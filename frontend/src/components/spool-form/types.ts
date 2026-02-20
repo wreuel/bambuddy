@@ -1,4 +1,13 @@
+
 import type { Printer, SpoolKProfile } from '../../api/client';
+
+// Catalog color display type (moved from component)
+export interface CatalogDisplayColor {
+  name: string;
+  hex: string;
+  manufacturer?: string;
+  material?: string;
+}
 
 // Form data structure
 export interface SpoolFormData {
@@ -79,6 +88,7 @@ export interface FilamentSectionProps extends SectionProps {
   selectedPresetOption?: FilamentOption;
   filamentOptions: FilamentOption[];
   availableBrands: string[];
+  availableMaterials: string[];
 }
 
 // Color section props
