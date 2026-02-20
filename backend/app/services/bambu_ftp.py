@@ -363,7 +363,6 @@ class BambuFTPClient:
 
             uploaded = 0
             callback_exception: Exception | None = None
-            transfer_response_ok = True
 
             # Use manual transfer instead of storbinary() for A1 compatibility
             # A1 printers have issues with storbinary's voidresp() hanging after transfer
@@ -409,11 +408,14 @@ class BambuFTPClient:
                     except OSError:
                         pass
 
-            try:
-                self._ftp.voidresp()
-            except (OSError, ftplib.Error) as e:
-                transfer_response_ok = False
-                logger.debug("FTP upload final response for %s was not clean: %s", remote_path, e)
+            # Skip voidresp() for A1 models — they hang after transfercmd uploads
+            if self.printer_model not in self.A1_MODELS:
+                try:
+                    self._ftp.voidresp()
+                except (OSError, ftplib.Error) as e:
+                    # Data transfer already completed — voidresp() failure is just a noisy
+                    # 226 acknowledgment issue, not an actual upload failure. Log and continue.
+                    logger.warning("FTP upload response for %s was not clean (data already sent): %s", remote_path, e)
 
             if callback_exception is not None:
                 cleanup_ok = False
@@ -429,9 +431,6 @@ class BambuFTPClient:
                 raise RuntimeError(
                     f"Upload cancelled but failed to remove partial file {remote_path} from printer"
                 ) from callback_exception
-
-            if not transfer_response_ok:
-                return False
 
             logger.info("FTP upload complete: %s", remote_path)
             return True

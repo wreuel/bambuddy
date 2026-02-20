@@ -502,17 +502,19 @@ export function PrintModal({
 
     setIsSubmitting(false);
 
-    // Show result toast
+    // Show result toast (skip for reprint mode — the dispatch toast handles it)
     if (results.failed === 0) {
-      if (assignmentMode === 'model') {
-        showToast(mode === 'edit-queue-item' ? 'Queue item updated' : `Queued for any ${targetModel}`);
-      } else {
-        if (mode === 'edit-queue-item') {
-          showToast('Queue item updated');
-        } else if (results.success === 1) {
-          showToast('Print queued for printer');
+      if (mode !== 'reprint') {
+        if (assignmentMode === 'model') {
+          showToast(mode === 'edit-queue-item' ? 'Queue item updated' : `Queued for any ${targetModel}`);
         } else {
-          showToast(`Print queued for ${results.success} printers`);
+          if (mode === 'edit-queue-item') {
+            showToast('Queue item updated');
+          } else if (results.success === 1) {
+            showToast('Print queued for printer');
+          } else {
+            showToast(`Print queued for ${results.success} printers`);
+          }
         }
       }
       queryClient.invalidateQueries({ queryKey: ['queue'] });
@@ -754,4 +756,3 @@ export function PrintModal({
 
 // Re-export types for convenience
 export type { PrintModalMode, PrintModalProps } from './types';
-

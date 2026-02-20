@@ -24,6 +24,7 @@ from backend.app.api.routes import (
     firmware,
     github_backup,
     groups,
+    inventory,
     kprofiles,
     library,
     local_presets,
@@ -32,6 +33,7 @@ from backend.app.api.routes import (
     notification_templates,
     notifications,
     pending_uploads,
+    print_log,
     print_queue,
     printers,
     projects,
@@ -42,6 +44,7 @@ from backend.app.api.routes import (
     system,
     updates,
     users,
+    virtual_printers,
     webhook,
     websocket,
 )
@@ -58,6 +61,7 @@ from backend.app.services.bambu_mqtt import PrinterState
 from backend.app.services.github_backup import github_backup_service
 from backend.app.services.homeassistant import homeassistant_service
 from backend.app.services.mqtt_relay import mqtt_relay
+from backend.app.services.mqtt_smart_plug import mqtt_smart_plug_service
 from backend.app.services.notification_service import notification_service
 from backend.app.services.print_scheduler import scheduler as print_scheduler
 from backend.app.services.printer_manager import (

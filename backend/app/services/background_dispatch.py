@@ -178,16 +178,14 @@ class BackgroundDispatchService:
         Queued jobs are removed immediately. Active jobs are cancelled
         cooperatively and will stop at the next cancellation checkpoint.
         """
-        active_cancel_payload: dict[str, Any] | None = None
-        active_cancel_result: dict[str, Any] | None = None
-
         async with self._lock:
+            # Check active jobs first
             active_state = self._active_jobs.get(job_id)
             if active_state is not None:
                 logger.info("Cancel requested for active dispatch job %s", job_id)
                 self._cancel_requested_job_ids.add(job_id)
                 active_job = active_state.job
-                active_cancel_payload = self._build_state_payload_unlocked(
+                payload = self._build_state_payload_unlocked(
                     recent_event={
                         "status": "cancelling",
                         "job_id": active_job.id,
@@ -197,7 +195,7 @@ class BackgroundDispatchService:
                         "message": "Cancelling current dispatch...",
                     }
                 )
-                active_cancel_result = {
+                result = {
                     "cancelled": True,
                     "pending": True,
                     "job_id": active_job.id,
@@ -205,12 +203,10 @@ class BackgroundDispatchService:
                     "printer_id": active_job.printer_id,
                     "printer_name": active_job.printer_name,
                 }
+                await ws_manager.broadcast({"type": "background_dispatch", "data": payload})
+                return result
 
-        if active_cancel_payload and active_cancel_result:
-            await ws_manager.broadcast({"type": "background_dispatch", "data": active_cancel_payload})
-            return active_cancel_result
-
-        async with self._lock:
+            # Check queued jobs
             cancelled_job: PrintDispatchJob | None = None
             for job in self._queued_jobs:
                 if job.id == job_id:
@@ -438,9 +434,10 @@ class BackgroundDispatchService:
 
         if should_reset_batch:
             async with self._lock:
-                self._batch_total = 0
-                self._batch_completed = 0
-                self._batch_failed = 0
+                if len(self._queued_jobs) == 0 and len(self._active_jobs) == 0:
+                    self._batch_total = 0
+                    self._batch_completed = 0
+                    self._batch_failed = 0
 
     async def _mark_job_cancelled(self, job: PrintDispatchJob):
         async with self._lock:
@@ -584,10 +581,6 @@ class BackgroundDispatchService:
 
             self._raise_if_cancel_requested(job)
 
-            def upload_progress_callback(_uploaded: int, _total: int):
-                if self._is_cancel_requested(job.id):
-                    raise DispatchJobCancelled(f"Dispatch job {job.id} cancelled during upload")
-
             try:
                 await self._set_active_message(job, f"Uploading {archive_filename} to {printer_name}...")
                 loop = asyncio.get_running_loop()
@@ -645,7 +638,12 @@ class BackgroundDispatchService:
                         "Failed to upload file to printer. Check if SD card is inserted and properly formatted (FAT32/exFAT)."
                     )
 
-                register_expected_print(job.printer_id, remote_filename, job.source_id)
+                register_expected_print(
+                    job.printer_id,
+                    remote_filename,
+                    job.source_id,
+                    ams_mapping=job.options.get("ams_mapping"),
+                )
 
                 plate_id = self._resolve_plate_id(file_path, job.options.get("plate_id"))
 
@@ -739,10 +737,6 @@ class BackgroundDispatchService:
 
             self._raise_if_cancel_requested(job)
 
-            def upload_progress_callback(_uploaded: int, _total: int):
-                if self._is_cancel_requested(job.id):
-                    raise DispatchJobCancelled(f"Dispatch job {job.id} cancelled during upload")
-
             try:
                 await self._set_active_message(job, f"Uploading {library_filename} to {printer_name}...")
                 loop = asyncio.get_running_loop()
@@ -801,7 +795,12 @@ class BackgroundDispatchService:
                         "Failed to upload file to printer. Check if SD card is inserted and properly formatted (FAT32/exFAT)."
                     )
 
-                register_expected_print(job.printer_id, remote_filename, archive.id)
+                register_expected_print(
+                    job.printer_id,
+                    remote_filename,
+                    archive.id,
+                    ams_mapping=job.options.get("ams_mapping"),
+                )
 
                 plate_id = self._resolve_plate_id(file_path, job.options.get("plate_id"))
 
