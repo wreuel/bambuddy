@@ -643,7 +643,7 @@ export function ProjectDetailPage() {
                     {stats.total_energy_kwh.toFixed(3)} kWh
                     {stats.total_energy_cost > 0 && (
                       <span className="text-sm text-bambu-gray ml-1">
-                        ({currency}{stats.total_energy_cost.toFixed(2)})
+                        ({currency}{stats.total_energy_cost.toFixed(3)})
                       </span>
                     )}
                   </p>
