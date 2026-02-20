@@ -1233,6 +1233,13 @@ async def run_migrations(conn):
         await conn.execute(text("ALTER TABLE spool_usage_history ADD COLUMN cost REAL"))
     except OperationalError:
         pass  # Already applied
+    # Migration: Add archive_id field to spool_usage_history table
+    try:
+        await conn.execute(
+            text("ALTER TABLE spool_usage_history ADD COLUMN archive_id INTEGER REFERENCES print_archives(id)")
+        )
+    except OperationalError:
+        pass  # Already applied
 
     # Migration: Migrate single virtual printer key-value settings to virtual_printers table
     try:

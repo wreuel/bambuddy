@@ -365,11 +365,6 @@ export default function InventoryPage() {
     refetchInterval: 30000,
   });
 
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: api.getSettings,
-  });
-
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.deleteSpool(id),
     onSuccess: () => {

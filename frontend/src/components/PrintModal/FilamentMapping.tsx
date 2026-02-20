@@ -66,6 +66,10 @@ export function FilamentMapping({
     return total;
   }, [filamentComparison, trayCostMap, defaultCostPerKg]);
 
+  const hasAnyCost = useMemo(
+    () => Array.from(trayCostMap.values()).some((v) => v != null && v > 0),
+    [trayCostMap]
+  );
   const hasFilamentReqs = filamentReqs?.filaments && filamentReqs.filaments.length > 0;
   const isDualNozzle = filamentReqs?.filaments?.some((f) => f.nozzle_id != null) ?? false;
 
@@ -214,23 +218,12 @@ export function FilamentMapping({
               )}
             </div>
           ))}
-          {(() => {
-            // Check if any tray has a configured cost_per_kg
-            const hasAnyCost = Array.from(trayCostMap.values()).some((v) => v != null && v > 0);
-            if (totalCost > 0 || hasAnyCost) {
-              return (
-                <div className="text-xs text-bambu-gray">
-                  {t('printModal.totalCost')} <span className="text-white">{currencySymbol}{totalCost.toFixed(2)}</span>
-                </div>
-              );
-            } else {
-              return (
-                <div className="text-xs text-bambu-gray">
-                  {t('printModal.totalCost')} <span className="text-white">N/A</span>
-                </div>
-              );
-            }
-          })()}
+          <div className="text-xs text-bambu-gray">
+            {t('printModal.totalCost')}{' '}
+            <span className="text-white">
+              {totalCost > 0 || hasAnyCost ? `${currencySymbol}${totalCost.toFixed(2)}` : 'N/A'}
+            </span>
+          </div>
           {hasTypeMismatch && (
             <p className="text-xs text-orange-400 mt-2">Required filament type not found in printer.</p>
           )}

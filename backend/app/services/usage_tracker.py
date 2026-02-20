@@ -450,14 +450,14 @@ async def on_print_complete(
         if archive and total_cost == 0 and archive.print_name and archive.printer_id:
             legacy_cost_result = await db.execute(
                 select(func.coalesce(func.sum(SpoolUsageHistory.cost), 0)).where(
-                    SpoolUsageHistory.archive_id is None,
+                    SpoolUsageHistory.archive_id.is_(None),
                     SpoolUsageHistory.print_name == archive.print_name,
                     SpoolUsageHistory.printer_id == archive.printer_id,
                 )
             )
             total_cost = legacy_cost_result.scalar() or 0
-        if archive:
-            archive.cost = total_cost
+        if archive and total_cost > 0:
+            archive.cost = round(total_cost, 2)
             await db.commit()
 
     return results
