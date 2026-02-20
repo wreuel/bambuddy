@@ -48,6 +48,7 @@ from backend.app.models import (  # noqa: E402, F401
     spool_k_profile,
     spool_usage_history,
     user,
+    virtual_printer,
 )
 
 config = context.config
