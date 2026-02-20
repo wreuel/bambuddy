@@ -2580,7 +2580,7 @@ export function SettingsPage() {
                         Today
                       </div>
                       <div className="text-xl font-bold text-white">
-                        {plugEnergySummary.totalToday.toFixed(2)}
+                        {plugEnergySummary.totalToday.toFixed(3)}
                         <span className="text-sm font-normal text-bambu-gray ml-1">kWh</span>
                       </div>
                       {(localSettings?.energy_cost_per_kwh ?? 0) > 0 && (
@@ -2597,7 +2597,7 @@ export function SettingsPage() {
                         Yesterday
                       </div>
                       <div className="text-xl font-bold text-white">
-                        {plugEnergySummary.totalYesterday.toFixed(2)}
+                        {plugEnergySummary.totalYesterday.toFixed(3)}
                         <span className="text-sm font-normal text-bambu-gray ml-1">kWh</span>
                       </div>
                       {(localSettings?.energy_cost_per_kwh ?? 0) > 0 && (
@@ -2619,7 +2619,7 @@ export function SettingsPage() {
                       </div>
                       {(localSettings?.energy_cost_per_kwh ?? 0) > 0 && (
                         <div className="text-xs text-bambu-gray mt-1">
-                          ~{(plugEnergySummary.totalLifetime * (localSettings?.energy_cost_per_kwh ?? 0)).toFixed(2)} {getCurrencySymbol(localSettings?.currency || 'USD')}
+                          ~{(plugEnergySummary.totalLifetime * (localSettings?.energy_cost_per_kwh ?? 0)).toFixed(3)} {getCurrencySymbol(localSettings?.currency || 'USD')}
                         </div>
                       )}
                     </div>
