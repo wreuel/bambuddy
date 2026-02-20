@@ -1055,10 +1055,10 @@ async def on_print_start(printer_id: int, data: dict):
             from backend.app.api.routes.settings import get_setting
 
             _spoolman_on = await get_setting(db, "spoolman_enabled")
-        if not _spoolman_on or _spoolman_on.lower() != "true":
-            from backend.app.services.usage_tracker import on_print_start as usage_on_print_start
+            if not _spoolman_on or _spoolman_on.lower() != "true":
+                from backend.app.services.usage_tracker import on_print_start as usage_on_print_start
 
-            await usage_on_print_start(printer_id, data, printer_manager)
+                await usage_on_print_start(printer_id, data, printer_manager, db=db)
     except Exception as e:
         logger.warning("Usage tracker on_print_start failed: %s", e)
 
