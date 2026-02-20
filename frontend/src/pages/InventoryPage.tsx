@@ -16,6 +16,8 @@ import { ColumnConfigModal, type ColumnConfig } from '../components/ColumnConfig
 import { useToast } from '../contexts/ToastContext';
 import { resolveSpoolColorName } from '../utils/colors';
 import { getCurrencySymbol } from '../utils/currency';
+import { formatDateInput, parseUTCDate, type DateFormat } from '../utils/date';
+import { formatSlotLabel } from '../utils/amsHelpers';
 
 type ArchiveFilter = 'active' | 'archived';
 type UsageFilter = 'all' | 'used' | 'new';
@@ -100,10 +102,11 @@ const MATERIAL_COLORS: Record<string, string> = {
 
 type TFn = (key: string) => string;
 
-function formatDate(dateStr: string | null): string {
+function formatInventoryDate(dateStr: string | null, dateFormat: DateFormat = 'system'): string {
   if (!dateStr) return '-';
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  const date = parseUTCDate(dateStr);
+  if (!date) return '-';
+  return formatDateInput(date, dateFormat);
 }
 
 type CellCtx = {
@@ -112,6 +115,7 @@ type CellCtx = {
   pct: number;
   assignmentMap: Record<number, SpoolAssignment>;
   currencySymbol: string;
+  dateFormat: DateFormat;
 };
 
 // Column header labels (25 columns — matching SpoolBuddy exactly)
@@ -148,14 +152,14 @@ const columnCells: Record<string, (ctx: CellCtx) => ReactNode> = {
   id: ({ spool }) => (
     <span className="text-sm font-medium text-white">{spool.id}</span>
   ),
-  added_time: ({ spool }) => (
-    <span className="text-sm text-bambu-gray">{formatDate(spool.created_at)}</span>
+  added_time: ({ spool, dateFormat }) => (
+    <span className="text-sm text-bambu-gray">{formatInventoryDate(spool.created_at, dateFormat)}</span>
   ),
-  encode_time: ({ spool }) => (
-    <span className="text-sm text-bambu-gray">{formatDate(spool.encode_time)}</span>
+  encode_time: ({ spool, dateFormat }) => (
+    <span className="text-sm text-bambu-gray">{formatInventoryDate(spool.encode_time, dateFormat)}</span>
   ),
-  last_used_time: ({ spool }) => (
-    <span className="text-sm text-bambu-gray">{spool.last_used ? formatDate(spool.last_used) : 'Never'}</span>
+  last_used_time: ({ spool, dateFormat }) => (
+    <span className="text-sm text-bambu-gray">{spool.last_used ? formatInventoryDate(spool.last_used, dateFormat) : 'Never'}</span>
   ),
   rgba: ({ spool }) => (
     <div className="flex items-center justify-center">
@@ -187,12 +191,12 @@ const columnCells: Record<string, (ctx: CellCtx) => ReactNode> = {
     const assignment = assignmentMap[spool.id];
     if (!assignment) return <span className="text-sm text-bambu-gray">-</span>;
     const printerLabel = assignment.printer_name || `Printer ${assignment.printer_id}`;
-    // Bambu slot notation: AMS 0=A, 1=B, 2=C, 3=D; tray 0-based → 1-based
-    const slotLetter = String.fromCharCode(65 + assignment.ams_id);
-    const slotNumber = assignment.tray_id + 1;
+    const isExternal = assignment.ams_id === 254 || assignment.ams_id === 255;
+    const isHt = !isExternal && assignment.ams_id >= 128;
+    const slotLabel = formatSlotLabel(assignment.ams_id, assignment.tray_id, isHt, isExternal);
     return (
       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400">
-        {printerLabel} {slotLetter}{slotNumber}
+        {printerLabel} {slotLabel}
       </span>
     );
   },
@@ -276,7 +280,9 @@ const columnSortValues: Record<string, (spool: InventorySpool, assignmentMap: Re
   location: (s, am) => {
     const a = am[s.id];
     if (!a) return '';
-    return `${a.printer_name || ''} ${String.fromCharCode(65 + a.ams_id)}${a.tray_id + 1}`;
+    const isExt = a.ams_id === 254 || a.ams_id === 255;
+    const isHt = !isExt && a.ams_id >= 128;
+    return `${a.printer_name || ''} ${formatSlotLabel(a.ams_id, a.tray_id, isHt, isExt)}`;
   },
   label_weight: (s) => s.label_weight,
   net: (s) => Math.max(0, s.label_weight - s.weight_used),
@@ -339,6 +345,13 @@ export default function InventoryPage() {
     } catch { /* ignore */ }
     return 15;
   });
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: api.getSettings,
+  });
+
+  const dateFormat: DateFormat = settings?.date_format || 'system';
 
   const { data: spools, isLoading } = useQuery({
     queryKey: ['inventory-spools'],
@@ -944,7 +957,7 @@ export default function InventoryPage() {
                       >
                         {visibleColumns.map((colId) => (
                           <td key={colId} className="py-3 px-4">
-                            {columnCells[colId]?.({ spool, remaining, pct, assignmentMap, currencySymbol })}
+                            {columnCells[colId]?.({ spool, remaining, pct, assignmentMap, currencySymbol, dateFormat })}
                           </td>
                         ))}
                         <td className="py-3 px-4">
