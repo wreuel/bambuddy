@@ -2154,24 +2154,24 @@ async def on_print_complete(printer_id: int, data: dict):
                             )
                             if delete_result:
                                 logger.info("Deleted %s from printer %s SD card", remote_path, printer.name)
-                            break  # Success or file doesn't exist — no need to retry
+                                break
                         except Exception as e:
-                            if attempt < 3:
-                                logger.debug(
-                                    "SD card cleanup attempt %d/3 failed for %s: %s, retrying in 2s",
-                                    attempt,
-                                    remote_path,
-                                    e,
-                                )
-                                await asyncio.sleep(2)
-                            else:
-                                logger.debug(
-                                    "SD card cleanup failed after 3 attempts for %s: %s (non-critical)",
-                                    remote_path,
-                                    e,
-                                )
+                            delete_result = False
+                            logger.warning(
+                                "SD card cleanup attempt %d/3 raised for %s: %s",
+                                attempt,
+                                remote_path,
+                                e,
+                            )
+                        if not delete_result and attempt < 3:
+                            await asyncio.sleep(2)
+                        elif not delete_result:
+                            logger.warning(
+                                "SD card cleanup failed after 3 attempts for %s (file may linger on SD card)",
+                                remote_path,
+                            )
     except Exception as e:
-        logger.debug("SD card file cleanup failed for printer %s: %s (non-critical)", printer_id, e)
+        logger.warning("SD card file cleanup failed for printer %s: %s", printer_id, e)
 
     log_timing("SD card cleanup")
 
