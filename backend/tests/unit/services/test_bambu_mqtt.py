@@ -1212,13 +1212,15 @@ class TestRequestTopicAmsMapping:
 # ---------------------------------------------------------------------------
 
 
-def _ams_payload(tray_now, ams_units=None, tray_exist_bits=None):
+def _ams_payload(tray_now, ams_units=None, tray_exist_bits=None, ams_exist_bits=None):
     """Build minimal print.ams payload for tray_now disambiguation tests."""
     ams = {"tray_now": str(tray_now)}
     if ams_units is not None:
         ams["ams"] = ams_units
     if tray_exist_bits is not None:
         ams["tray_exist_bits"] = tray_exist_bits
+    if ams_exist_bits is not None:
+        ams["ams_exist_bits"] = ams_exist_bits
     return {"print": {"ams": ams}}
 
 
@@ -1301,7 +1303,7 @@ class TestTrayNowSingleNozzleX1E:
 
 
 class TestTrayNowSingleNozzleP2S:
-    """Single-nozzle, 2 AMS — global IDs 4-7 for AMS 1 pass through directly."""
+    """Single-nozzle, 2 AMS — tray_now > 3 passes through as global ID."""
 
     @pytest.fixture
     def mqtt_client(self):
@@ -1326,6 +1328,195 @@ class TestTrayNowSingleNozzleP2S:
 
         mqtt_client._process_message(_ams_payload(6))
         assert mqtt_client.state.tray_now == 6
+
+
+# ---------------------------------------------------------------------------
+# 2b. Single-nozzle P2S — multi-AMS local slot disambiguation (#420)
+# ---------------------------------------------------------------------------
+
+
+class TestTrayNowP2SMultiAmsDisambiguation:
+    """P2S firmware sends local slot IDs (0-3) in tray_now even with dual AMS.
+
+    When ams_exist_bits indicates >1 AMS unit and tray_now is 0-3, the backend
+    should use the MQTT mapping field (snow-encoded) to resolve the correct
+    global tray ID.
+    """
+
+    @pytest.fixture
+    def mqtt_client(self):
+        from backend.app.services.bambu_mqtt import BambuMQTTClient
+
+        client = BambuMQTTClient(
+            ip_address="192.168.1.100",
+            serial_number="TEST_P2S_DUAL",
+            access_code="12345678",
+        )
+        return client
+
+    def test_resolves_ams1_slot1_from_mapping(self, mqtt_client):
+        """tray_now=1 with mapping=[257] → global ID 5 (AMS1-T1).
+
+        257 snow-decoded: ams_hw_id=1, slot=1 → global 1*4+1=5.
+        """
+        # Set mapping field in raw_data (as the MQTT handler would)
+        mqtt_client.state.raw_data["mapping"] = [257]
+        mqtt_client._process_message(
+            _ams_payload(1, ams_exist_bits="3")  # '3' = 0b11 → AMS 0 and 1
+        )
+        assert mqtt_client.state.tray_now == 5
+
+    def test_resolves_ams1_slot0_from_mapping(self, mqtt_client):
+        """tray_now=0 with mapping=[256] → global ID 4 (AMS1-T0).
+
+        256 snow-decoded: ams_hw_id=1, slot=0 → global 1*4+0=4.
+        """
+        mqtt_client.state.raw_data["mapping"] = [256]
+        mqtt_client._process_message(_ams_payload(0, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 4
+
+    def test_resolves_ams1_slot3_from_mapping(self, mqtt_client):
+        """tray_now=3 with mapping=[259] → global ID 7 (AMS1-T3).
+
+        259 snow-decoded: ams_hw_id=1, slot=3 → global 1*4+3=7.
+        """
+        mqtt_client.state.raw_data["mapping"] = [259]
+        mqtt_client._process_message(_ams_payload(3, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 7
+
+    def test_ams0_slot_unchanged_when_mapping_confirms_ams0(self, mqtt_client):
+        """tray_now=1 with mapping=[1] → stays 1 (AMS0-T1).
+
+        1 snow-decoded: ams_hw_id=0, slot=1 → global 0*4+1=1.
+        """
+        mqtt_client.state.raw_data["mapping"] = [1]
+        mqtt_client._process_message(_ams_payload(1, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 1
+
+    def test_multicolor_resolves_ams1_from_multi_entry_mapping(self, mqtt_client):
+        """Multi-color print: mapping=[0, 257] → tray_now=1 resolves to AMS1-T1 (5).
+
+        Entry 0: ams_hw_id=0, slot=0 (local 0) — doesn't match tray_now=1.
+        Entry 257: ams_hw_id=1, slot=1 (local 1) — matches tray_now=1 → global 5.
+        """
+        mqtt_client.state.raw_data["mapping"] = [0, 257]
+        mqtt_client._process_message(_ams_payload(1, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 5
+
+    def test_multicolor_four_slot_mapping(self, mqtt_client):
+        """mapping=[65535, 65535, 65535, 257] → tray_now=1 resolves to global 5.
+
+        Only entry 257 has local slot=1, other entries are unmapped (65535).
+        Reproduces exact data from issue #420 support package.
+        """
+        mqtt_client.state.raw_data["mapping"] = [65535, 65535, 65535, 257]
+        mqtt_client._process_message(_ams_payload(1, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 5
+
+    def test_ambiguous_mapping_falls_back_to_local_slot(self, mqtt_client):
+        """Two AMS units with same local slot in mapping → ambiguous, keep local slot.
+
+        mapping=[1, 257]: both have local slot 1 (AMS0-T1 and AMS1-T1).
+        Cannot disambiguate → fall back to tray_now=1.
+        """
+        mqtt_client.state.raw_data["mapping"] = [1, 257]
+        mqtt_client._process_message(_ams_payload(1, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 1
+
+    def test_no_mapping_falls_back_to_local_slot(self, mqtt_client):
+        """No mapping field available → fall back to raw tray_now."""
+        # No mapping in raw_data (e.g. manual filament load, not during print)
+        mqtt_client._process_message(_ams_payload(1, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 1
+
+    def test_empty_mapping_falls_back_to_local_slot(self, mqtt_client):
+        """Empty mapping list → fall back to raw tray_now."""
+        mqtt_client.state.raw_data["mapping"] = []
+        mqtt_client._process_message(_ams_payload(1, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 1
+
+    def test_single_ams_passthrough(self, mqtt_client):
+        """Single AMS (ams_exist_bits='1') → tray_now 0-3 is direct global ID."""
+        mqtt_client._process_message(_ams_payload(2, ams_exist_bits="1"))
+        assert mqtt_client.state.tray_now == 2
+
+    def test_no_ams_exist_bits_passthrough(self, mqtt_client):
+        """No ams_exist_bits in payload → fall back to raw tray_now."""
+        mqtt_client._process_message(_ams_payload(1))
+        assert mqtt_client.state.tray_now == 1
+
+    def test_tray_now_255_unaffected_by_multi_ams(self, mqtt_client):
+        """tray_now=255 (unloaded) passes through regardless of AMS count."""
+        mqtt_client.state.raw_data["mapping"] = [257]
+        mqtt_client._process_message(_ams_payload(255, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 255
+
+    def test_tray_now_above_3_unaffected(self, mqtt_client):
+        """tray_now > 3 is already a global ID and passes through directly."""
+        mqtt_client._process_message(_ams_payload(6, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 6
+
+    def test_last_loaded_tray_uses_resolved_global_id(self, mqtt_client):
+        """last_loaded_tray should reflect the resolved global ID, not local slot."""
+        mqtt_client.state.raw_data["mapping"] = [257]
+        mqtt_client.state.state = "RUNNING"
+        mqtt_client._process_message(_ams_payload(1, ams_exist_bits="3"))
+        assert mqtt_client.state.tray_now == 5
+        assert mqtt_client.state.last_loaded_tray == 5
+
+
+class TestResolveLocalSlotFromMapping:
+    """Unit tests for _resolve_local_slot_from_mapping static method."""
+
+    def test_single_match_ams0(self):
+        from backend.app.services.bambu_mqtt import BambuMQTTClient
+
+        assert BambuMQTTClient._resolve_local_slot_from_mapping(1, [1]) == 1
+
+    def test_single_match_ams1(self):
+        from backend.app.services.bambu_mqtt import BambuMQTTClient
+
+        # 257 = 1*256 + 1 → AMS1 slot1 → global 5
+        assert BambuMQTTClient._resolve_local_slot_from_mapping(1, [257]) == 5
+
+    def test_single_match_ams2(self):
+        from backend.app.services.bambu_mqtt import BambuMQTTClient
+
+        # 514 = 2*256 + 2 → AMS2 slot2 → global 10
+        assert BambuMQTTClient._resolve_local_slot_from_mapping(2, [514]) == 10
+
+    def test_unmapped_entries_skipped(self):
+        from backend.app.services.bambu_mqtt import BambuMQTTClient
+
+        assert BambuMQTTClient._resolve_local_slot_from_mapping(1, [65535, 65535, 65535, 257]) == 5
+
+    def test_no_match_returns_none(self):
+        from backend.app.services.bambu_mqtt import BambuMQTTClient
+
+        # mapping has slot 0 only, looking for slot 2
+        assert BambuMQTTClient._resolve_local_slot_from_mapping(2, [0]) is None
+
+    def test_ambiguous_returns_none(self):
+        from backend.app.services.bambu_mqtt import BambuMQTTClient
+
+        # Both AMS0 slot1 (1) and AMS1 slot1 (257) → ambiguous
+        assert BambuMQTTClient._resolve_local_slot_from_mapping(1, [1, 257]) is None
+
+    def test_none_mapping_returns_none(self):
+        from backend.app.services.bambu_mqtt import BambuMQTTClient
+
+        assert BambuMQTTClient._resolve_local_slot_from_mapping(1, None) is None
+
+    def test_empty_mapping_returns_none(self):
+        from backend.app.services.bambu_mqtt import BambuMQTTClient
+
+        assert BambuMQTTClient._resolve_local_slot_from_mapping(1, []) is None
+
+    def test_ams_ht_slot0_match(self):
+        from backend.app.services.bambu_mqtt import BambuMQTTClient
+
+        # AMS-HT id=128: snow = 128*256 + 0 = 32768
+        assert BambuMQTTClient._resolve_local_slot_from_mapping(0, [32768]) == 128
 
 
 # ---------------------------------------------------------------------------
