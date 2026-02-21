@@ -2,7 +2,9 @@
 
 All notable changes to Bambuddy will be documented in this file.
 
-## [0.2.1b2] - Unreleased
+## [0.2.1b3] - Unreleased
+
+## [0.2.1b2] - 2026-02-21
 
 ### Fixed
 - **Wrong AMS Unit Displayed With Dual AMS on P2S** ([#420](https://github.com/maziggy/bambuddy/issues/420)) — On P2S printers with two AMS units, the UI highlighted the wrong AMS when printing from the second unit (e.g., printing from AMS-B slot 2 but AMS-A slot 2 was shown as active). The P2S firmware sends local slot IDs (0-3) in `tray_now`, not global tray IDs — contrary to the previous assumption that all single-nozzle printers report global IDs. Filament usage tracking was unaffected because it uses the MQTT `mapping` field (snow-encoded with correct AMS hardware IDs). The display now cross-references `tray_now` with the MQTT mapping field to resolve the correct AMS unit when multiple AMS units are detected via `ams_exist_bits`. Falls back to the raw value when no mapping is available (e.g., manual filament load outside of a print) or when the mapping is ambiguous.
