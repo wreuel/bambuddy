@@ -6,6 +6,7 @@ All notable changes to Bambuddy will be documented in this file.
 
 ### Fixed
 - **Developer Mode Detection Always Reports Null** — The MQTT `fun` field is an integer in the JSON payload, but the parser used `int(value, 16)` which requires a string argument. This raised `TypeError` on every message, silently caught by the exception handler, so `developer_mode` was never set. Now handles both integer and hex string formats.
+- **File Manager Rename Doesn't Update Displayed Name** ([#460](https://github.com/maziggy/bambuddy/issues/460)) — Renaming a file in the File Manager updated the `filename` field but not `file_metadata.print_name`, which the UI uses as the primary display name. Since `print_name` is extracted from inside the 3MF at upload time, it always took precedence over the renamed `filename`. The rename endpoint now also updates `print_name` in the file metadata when present.
 
 ## [0.2.1b2] - 2026-02-21
 
