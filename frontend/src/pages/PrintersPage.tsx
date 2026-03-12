@@ -5072,6 +5072,34 @@ function AddPrinterModal({
               />
               <p className="text-xs text-bambu-gray mt-1">{t('printers.locationHelp')}</p>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-bambu-gray mb-1">{t('printers.modal.printerPrice')}</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                  value={form.price ?? ''}
+                  onChange={(e) => setForm({ ...form, price: e.target.value ? Number(e.target.value) : undefined })}
+                  placeholder={t('printers.modal.pricePlaceholder')}
+                />
+                <p className="text-xs text-bambu-gray mt-1">{t('printers.modal.priceHelp')}</p>
+              </div>
+              <div>
+                <label className="block text-sm text-bambu-gray mb-1">{t('printers.modal.lifespanHours')}</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                  value={form.lifespan_hours ?? ''}
+                  onChange={(e) => setForm({ ...form, lifespan_hours: e.target.value ? Number(e.target.value) : undefined })}
+                  placeholder={t('printers.modal.lifespanPlaceholder')}
+                />
+                <p className="text-xs text-bambu-gray mt-1">{t('printers.modal.lifespanHelp')}</p>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
