@@ -2,8 +2,8 @@
  * Tests for the StatsPage component.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { render } from '../utils';
 import { StatsPage } from '../../pages/StatsPage';
 import { http, HttpResponse } from 'msw';
@@ -395,6 +395,143 @@ describe('StatsPage', () => {
       await waitFor(() => {
         expect(screen.getByText('Recalculate Costs')).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('printer filter', () => {
+    it('shows printer selector dropdown when multiple printers exist', async () => {
+      render(<StatsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('All Printers')).toBeInTheDocument();
+      });
+    });
+
+    it('lists each printer as an option', async () => {
+      render(<StatsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('All Printers')).toBeInTheDocument();
+      });
+
+      const select = screen.getByDisplayValue('All Printers');
+      const options = select.querySelectorAll('option');
+      const optionTexts = Array.from(options).map(o => o.textContent);
+      expect(optionTexts).toContain('All Printers');
+      expect(optionTexts).toContain('X1 Carbon');
+      expect(optionTexts).toContain('P1S');
+    });
+
+    it('does not show printer selector with single printer', async () => {
+      server.use(
+        http.get('/api/v1/printers/', () => {
+          return HttpResponse.json([{ id: 1, name: 'Only Printer' }]);
+        })
+      );
+      render(<StatsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Dashboard')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('All Printers')).not.toBeInTheDocument();
+    });
+
+    it('sends printer_id to /archives/stats when printer is selected', async () => {
+      const statsCalls: string[] = [];
+      server.use(
+        http.get('/api/v1/archives/stats', ({ request }) => {
+          statsCalls.push(new URL(request.url).search);
+          return HttpResponse.json(mockStats);
+        })
+      );
+
+      render(<StatsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('All Printers')).toBeInTheDocument();
+      });
+
+      // Select printer 1
+      const select = screen.getByDisplayValue('All Printers');
+      fireEvent.change(select, { target: { value: '1' } });
+
+      await waitFor(() => {
+        const withPrinterId = statsCalls.find(s => s.includes('printer_id=1'));
+        expect(withPrinterId).toBeDefined();
+      });
+    });
+
+    it('sends printer_id to /archives/slim when printer is selected', async () => {
+      const slimCalls: string[] = [];
+      server.use(
+        http.get('/api/v1/archives/slim', ({ request }) => {
+          slimCalls.push(new URL(request.url).search);
+          return HttpResponse.json(mockArchives);
+        })
+      );
+
+      render(<StatsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('All Printers')).toBeInTheDocument();
+      });
+
+      const select = screen.getByDisplayValue('All Printers');
+      fireEvent.change(select, { target: { value: '2' } });
+
+      await waitFor(() => {
+        const withPrinterId = slimCalls.find(s => s.includes('printer_id=2'));
+        expect(withPrinterId).toBeDefined();
+      });
+    });
+
+    it('sends printer_id to /analysis/failures when printer is selected', async () => {
+      const failureCalls: string[] = [];
+      server.use(
+        http.get('/api/v1/archives/analysis/failures', ({ request }) => {
+          failureCalls.push(new URL(request.url).search);
+          return HttpResponse.json(mockFailureAnalysis);
+        })
+      );
+
+      render(<StatsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('All Printers')).toBeInTheDocument();
+      });
+
+      const select = screen.getByDisplayValue('All Printers');
+      fireEvent.change(select, { target: { value: '1' } });
+
+      await waitFor(() => {
+        const withPrinterId = failureCalls.find(s => s.includes('printer_id=1'));
+        expect(withPrinterId).toBeDefined();
+      });
+    });
+
+    it('does not send printer_id when All Printers is selected', async () => {
+      const statsCalls: string[] = [];
+      server.use(
+        http.get('/api/v1/archives/stats', ({ request }) => {
+          statsCalls.push(new URL(request.url).search);
+          return HttpResponse.json(mockStats);
+        })
+      );
+
+      render(<StatsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('All Printers')).toBeInTheDocument();
+      });
+
+      // Initial load should not have printer_id
+      await waitFor(() => {
+        expect(statsCalls.length).toBeGreaterThan(0);
+      });
+
+      const withoutPrinterId = statsCalls.every(s => !s.includes('printer_id'));
+      expect(withoutPrinterId).toBe(true);
     });
   });
 });

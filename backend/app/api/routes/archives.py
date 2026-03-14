@@ -158,6 +158,7 @@ async def list_archives(
 async def list_archives_slim(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
+    printer_id: int | None = Query(None, description="Filter by printer ID"),
     limit: int = Query(default=10000, le=50000),
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
@@ -175,6 +176,8 @@ async def list_archives_slim(
     if date_to:
         dt_to = datetime.combine(date_to, time.max, tzinfo=timezone.utc)
         filters.append(PrintArchive.created_at <= dt_to)
+    if printer_id is not None:
+        filters.append(PrintArchive.printer_id == printer_id)
 
     query = (
         select(
@@ -523,10 +526,11 @@ async def export_stats(
 async def get_archive_stats(
     date_from: date | None = Query(None, description="Start date (inclusive), YYYY-MM-DD"),
     date_to: date | None = Query(None, description="End date (inclusive), YYYY-MM-DD"),
+    printer_id: int | None = Query(None, description="Filter by printer ID"),
     db: AsyncSession = Depends(get_db),
     _: User | None = RequirePermissionIfAuthEnabled(Permission.STATS_READ),
 ):
-    """Get statistics across all archives."""
+    """Get statistics across all archives, optionally filtered by printer."""
     # Build date filter conditions
     base_conditions = []
     if date_from:
@@ -535,6 +539,8 @@ async def get_archive_stats(
     if date_to:
         dt_to = datetime.combine(date_to, time.max, tzinfo=timezone.utc)
         base_conditions.append(PrintArchive.created_at <= dt_to)
+    if printer_id is not None:
+        base_conditions.append(PrintArchive.printer_id == printer_id)
 
     # Total counts
     total_result = await db.execute(select(func.count(PrintArchive.id)).where(*base_conditions))

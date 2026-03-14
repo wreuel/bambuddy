@@ -706,17 +706,19 @@ function FilamentTrendsWidget({
   return <FilamentTrends archives={archives} currency={currency} dateFrom={dateFrom} dateTo={dateTo} />;
 }
 
-function FailureAnalysisWidget({ size = 1, dateFrom, dateTo }: {
+function FailureAnalysisWidget({ size = 1, dateFrom, dateTo, printerId }: {
   size?: 1 | 2 | 4;
   dateFrom?: string;
   dateTo?: string;
+  printerId?: number;
 }) {
   const { t } = useTranslation();
   const hasDateRange = !!(dateFrom || dateTo);
   const { data: analysis, isLoading } = useQuery({
-    queryKey: ['failureAnalysis', dateFrom, dateTo],
+    queryKey: ['failureAnalysis', dateFrom, dateTo, printerId],
     queryFn: () => api.getFailureAnalysis({
       ...(hasDateRange ? { dateFrom, dateTo } : { days: 30 }),
+      printerId,
     }),
   });
 
@@ -929,6 +931,7 @@ export function StatsPage() {
   const [dashboardKey, setDashboardKey] = useState(0);
   const [hiddenCount, setHiddenCount] = useState(0);
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [selectedPrinterId, setSelectedPrinterId] = useState<number | undefined>(undefined);
   const [timeframe, setTimeframe] = useState<TimeframeState>(() => {
     try {
       const saved = localStorage.getItem('bambusy-stats-timeframe');
@@ -978,10 +981,11 @@ export function StatsPage() {
   }, [dashboardKey]);
 
   const { data: stats, isLoading, refetch: refetchStats } = useQuery({
-    queryKey: ['archiveStats', effectiveDateRange.dateFrom, effectiveDateRange.dateTo],
+    queryKey: ['archiveStats', effectiveDateRange.dateFrom, effectiveDateRange.dateTo, selectedPrinterId],
     queryFn: () => api.getArchiveStats({
       dateFrom: effectiveDateRange.dateFrom,
       dateTo: effectiveDateRange.dateTo,
+      printerId: selectedPrinterId,
     }),
   });
 
@@ -991,8 +995,8 @@ export function StatsPage() {
   });
 
   const { data: archives, refetch: refetchArchives } = useQuery({
-    queryKey: ['archivesSlim', effectiveDateRange.dateFrom, effectiveDateRange.dateTo],
-    queryFn: () => api.getArchivesSlim(effectiveDateRange.dateFrom, effectiveDateRange.dateTo),
+    queryKey: ['archivesSlim', effectiveDateRange.dateFrom, effectiveDateRange.dateTo, selectedPrinterId],
+    queryFn: () => api.getArchivesSlim(effectiveDateRange.dateFrom, effectiveDateRange.dateTo, selectedPrinterId),
   });
 
   const { data: settings } = useQuery({
@@ -1004,7 +1008,7 @@ export function StatsPage() {
     setShowExportMenu(false);
     setIsExporting(true);
     try {
-      const { blob, filename } = await api.exportStats({ format, days: 90 });
+      const { blob, filename } = await api.exportStats({ format, days: 90, printerId: selectedPrinterId });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1069,7 +1073,7 @@ export function StatsPage() {
     {
       id: 'failure-analysis',
       title: t('stats.failureAnalysis'),
-      component: (size) => <FailureAnalysisWidget size={size} dateFrom={effectiveDateRange.dateFrom} dateTo={effectiveDateRange.dateTo} />,
+      component: (size) => <FailureAnalysisWidget size={size} dateFrom={effectiveDateRange.dateFrom} dateTo={effectiveDateRange.dateTo} printerId={selectedPrinterId} />,
       defaultSize: 1,
     },
     {
@@ -1180,6 +1184,19 @@ export function StatsPage() {
               </div>
             )}
           </div>
+          {/* Printer Filter */}
+          {printers && printers.length > 1 && (
+            <select
+              className="px-3 py-2 bg-bambu-dark-tertiary border border-bambu-dark-tertiary rounded-lg text-white text-sm focus:border-bambu-green focus:outline-none"
+              value={selectedPrinterId ?? ''}
+              onChange={(e) => setSelectedPrinterId(e.target.value ? Number(e.target.value) : undefined)}
+            >
+              <option value="">{t('stats.allPrinters')}</option>
+              {printers.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
           {/* Timeframe Selector */}
           <div className="relative">
             <Button

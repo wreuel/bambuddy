@@ -2555,10 +2555,11 @@ export const api = {
     if (dateTo) params.set('date_to', dateTo);
     return request<Archive[]>(`/archives/?${params}`);
   },
-  getArchivesSlim: (dateFrom?: string, dateTo?: string) => {
+  getArchivesSlim: (dateFrom?: string, dateTo?: string, printerId?: number) => {
     const params = new URLSearchParams();
     if (dateFrom) params.set('date_from', dateFrom);
     if (dateTo) params.set('date_to', dateTo);
+    if (printerId) params.set('printer_id', String(printerId));
     const qs = params.toString();
     return request<ArchiveSlim[]>(`/archives/slim${qs ? `?${qs}` : ''}`);
   },
@@ -2601,10 +2602,11 @@ export const api = {
     request<Archive>(`/archives/${id}/favorite`, { method: 'POST' }),
   deleteArchive: (id: number) =>
     request<void>(`/archives/${id}`, { method: 'DELETE' }),
-  getArchiveStats: (options?: { dateFrom?: string; dateTo?: string }) => {
+  getArchiveStats: (options?: { dateFrom?: string; dateTo?: string; printerId?: number }) => {
     const params = new URLSearchParams();
     if (options?.dateFrom) params.set('date_from', options.dateFrom);
     if (options?.dateTo) params.set('date_to', options.dateTo);
+    if (options?.printerId) params.set('printer_id', String(options.printerId));
     const qs = params.toString();
     return request<ArchiveStats>(`/archives/stats${qs ? `?${qs}` : ''}`);
   },

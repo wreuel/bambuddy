@@ -1012,6 +1012,8 @@ export default {
     topFailureReasons: 'Häufigste Fehlerursachen',
     failedPrintsCount: '{{failed}} / {{total}} Drucke fehlgeschlagen',
     lastWeekRate: 'Letzte Woche: {{rate}}%',
+    // Filters
+    allPrinters: 'Alle Drucker',
     // Actions
     resetLayout: 'Layout zurücksetzen',
     recalculateCosts: 'Kosten neu berechnen',
